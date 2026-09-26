@@ -15,17 +15,19 @@ and one number that matters.
 | Trace   | The code, dim, on screen                 | Type over it; every key goes green/red            | 97 % of keystrokes correct                        |
 
 Each snippet sits in a box from 1 to 5. Box 1, where every snippet starts and where a miss
-sends it back, is recall; boxes 2 to 5 are blank. A pass moves it up a box and it comes
-back after 2, 4, 8 or 16 days. `drill` serves one rep after another in that order: whatever
+sends it back, is a cold try: the spec and the tests, nothing else. Miss it and the
+reference appears; you read it for as long as you need and write it again while it is
+fresh, still graded by the tests. Boxes 2 to 5 are blank only. A pass moves a snippet up
+a box and it comes back after 2, 4, 8 or 16 days. `drill` serves one rep after another in that order: whatever
 is ready first, then the weakest, then the least recent, with no count to clear; q stops
 whenever you like. Trace and predict are never scheduled and move no boxes: `drill trace
 asm` when the syntax is new to you, `drill predict c` to train the model in your head
 before your fingers. The scoreboard is the blank-mode first-try pass rate, week over week.
 
-Recall is not memorising. Read the reference until you understand it, hide it, and write
+Nothing here is memorising. Read the reference until you understand it, hide it, and write
 a version that passes the tests; different names or a different approach are fine. After
 a miss, r shows the reference again for another go, and only the first go counts as a
-first try.
+first try. `drill recall` on its own runs that read-then-write loop directly.
 
 Trace grades code, not spacing: indentation and the spaces between tokens fill in as you
 type the next character, stray spaces are ignored, and only Enter is required to end a

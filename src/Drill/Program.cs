@@ -71,6 +71,10 @@ public static class Program
         var title = fixedMode?.ToString().ToLowerInvariant() ?? "drill";
         var scope = language is null ? "" : $" · {language.Value.DisplayName()}";
         AnsiConsole.MarkupLine($"[bold]{title}[/]{scope} · streak {workspace.Store.Streak(today)} days · Enter for the next rep, q to stop");
+        if (fixedMode is null)
+        {
+            AnsiConsole.MarkupLine("[grey]new or missed snippets come as a cold try from the spec; miss it and the reference follows, then you write it again[/]");
+        }
         ProjectsLine(workspace);
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var count = 0;
@@ -79,15 +83,15 @@ public static class Program
         while (true)
         {
             var snippet = Next(workspace, pool, recent, today);
-            var card = workspace.Store.GetCard(snippet.Id);
-            var mode = fixedMode ?? ModeFor(card?.Box ?? 1, snippet);
-            AnsiConsole.MarkupLine($"[grey]rep {count + 1}[/] {Markup.Escape(snippet.Id)} {Markup.Escape(snippet.Title)} [grey]{snippet.Language.DisplayName()}[/] · [yellow]{mode.ToString().ToLowerInvariant()}[/]");
+            var box = workspace.Store.GetCard(snippet.Id)?.Box ?? 1;
+            var label = fixedMode is null ? Label(box, ModeFor(box, snippet)) : fixedMode.Value.ToString().ToLowerInvariant();
+            AnsiConsole.MarkupLine($"[grey]rep {count + 1}[/] {Markup.Escape(snippet.Id)} {Markup.Escape(snippet.Title)} [grey]{snippet.Language.DisplayName()}[/] · [yellow]{label}[/]");
             var key = Console.ReadKey(intercept: true);
             if (key.KeyChar is 'q' or 'Q' || key.Key == ConsoleKey.Escape)
             {
                 break;
             }
-            var result = await RunAsync(mode, snippet, workspace, today);
+            var result = fixedMode is null ? await RepAsync(snippet, box, workspace, today) : await RunAsync(fixedMode.Value, snippet, workspace, today);
             Report(result, workspace, snippet, today);
             count++;
             if (result.Passed) passes++;
@@ -156,9 +160,9 @@ public static class Program
                 continue;
             }
             var done = members.TakeWhile(m => m != next).Select(m => m.Language.DisplayName()).ToList();
-            var mode = ModeFor(Level(workspace, next), next);
+            var level = Level(workspace, next);
             var trail = done.Count == 0 ? "" : $"  [grey]done: {string.Join(", ", done)}[/]";
-            AnsiConsole.MarkupLine($"[grey]{Markup.Escape(family)}[/] {Markup.Escape(next.Id)} {Markup.Escape(next.Title)} [grey]{next.Language.DisplayName()}[/] · [yellow]{mode.ToString().ToLowerInvariant()}[/]{trail}");
+            AnsiConsole.MarkupLine($"[grey]{Markup.Escape(family)}[/] {Markup.Escape(next.Id)} {Markup.Escape(next.Title)} [grey]{next.Language.DisplayName()}[/] · [yellow]{Label(level, ModeFor(level, next))}[/]{trail}");
             var key = Console.ReadKey(intercept: true);
             if (key.KeyChar is 'q' or 'Q' || key.Key == ConsoleKey.Escape)
             {
@@ -173,7 +177,7 @@ public static class Program
                 skipped.Add(family);
                 continue;
             }
-            var result = await RunAsync(mode, next, workspace, today);
+            var result = await RepAsync(next, level, workspace, today);
             Report(result, workspace, next, today);
             count++;
             if (result.Passed) passes++;
@@ -686,10 +690,13 @@ public static class Program
             Languages: cs (C#, Roslyn in-process), py (python3), c (cc), asm (ARM64, assembled with cc
             and called from a C harness). lang can be given anywhere an id can.
 
-            Every snippet sits in a box. Box 1 (new, or missed last time) comes up in recall; boxes 2 to 5
-            come up in blank. A pass moves it up one box and it returns after 2, 4, 8 or 16 days; a miss
-            sends it back to box 1 for tomorrow. The session serves whatever is ready first, then the
-            weakest, so there is no list to clear. Trace, predict, bits and compile never move boxes.
+            Every snippet sits in a box. Box 1 (new, or missed last time) is a cold try from the spec and
+            the tests; miss it and the reference appears, you read it as long as you need and write it
+            again while it is fresh. Boxes 2 to 5 are blank only. Nothing is graded on remembering text:
+            the tests decide, and any version that passes is right. A pass moves a snippet up one box and
+            it returns after 2, 4, 8 or 16 days; a miss sends it back to box 1 for tomorrow. The session
+            serves whatever is ready first, then the weakest, so there is no list to clear. Trace,
+            predict, bits and compile never move boxes.
             The number that matters is the blank-mode first-try rate, week over week.
             Recall and blank use a built-in editor: Ctrl+D submits, Esc gives up, Tab indents.
             Set DRILL_EDITOR (nano, vim, "code --wait") only if you really want an external one.
@@ -717,26 +724,49 @@ public static class Program
         return null;
     }
 
-    /// Box 1 (new, or missed last time) is recall: read it, then write it. Boxes 2 to 5 are
-    /// blank: the spec and the tests only. Snippets without tests stay in recall. Trace is
-    /// never scheduled; it is there for the asking.
+    /// Every scheduled rep is blank when the snippet has tests: the spec and the tests,
+    /// nothing else. Snippets without tests fall back to recall. Trace is never scheduled;
+    /// it is there for the asking. Box 1 adds a second act on a miss (see RepAsync).
     private static Mode ModeFor(int box, Snippet snippet)
     {
-        if (box >= 2 && snippet.Supports(Mode.Blank) && Runner.Available(snippet.Language))
+        if (snippet.Supports(Mode.Blank) && Runner.Available(snippet.Language))
         {
             return Mode.Blank;
         }
         return snippet.Supports(Mode.Recall) || !snippet.Supports(Mode.Trace) ? Mode.Recall : Mode.Trace;
     }
 
-    private static async Task<AttemptResult> RunAsync(Mode mode, Snippet snippet, Workspace workspace, DateOnly today)
+    /// What a rep line calls the mode: a box-1 blank is a cold try.
+    private static string Label(int box, Mode mode) => box <= 1 && mode == Mode.Blank ? "cold try" : mode.ToString().ToLowerInvariant();
+
+    /// One scheduled rep. In box 1 you try it cold from the spec and the tests, and a miss
+    /// is not the end: the reference appears, you read it for as long as you need, and you
+    /// write it again while it is fresh. Nothing here asks you to remember text; the tests
+    /// decide, and any version that passes is right.
+    private static async Task<AttemptResult> RepAsync(Snippet snippet, int box, Workspace workspace, DateOnly today)
+    {
+        var mode = ModeFor(box, snippet);
+        var cold = box <= 1 && mode == Mode.Blank;
+        var result = cold
+            ? await RunAsync(mode, snippet, workspace, today, "cold try: the spec and the tests, nothing else. Miss, and the reference follows. Esc goes straight to it.")
+            : await RunAsync(mode, snippet, workspace, today);
+        if (cold && !result.Passed && snippet.Supports(Mode.Recall))
+        {
+            AnsiConsole.MarkupLine($"[yellow bold]MISS[/]  {Markup.Escape(result.Note)}  ·  [grey]now the reference; read it, then write it again while it's fresh · Enter[/]");
+            Console.ReadKey(intercept: true);
+            result = await RunAsync(Mode.Recall, snippet, workspace, today);
+        }
+        return result;
+    }
+
+    private static async Task<AttemptResult> RunAsync(Mode mode, Snippet snippet, Workspace workspace, DateOnly today, string? hint = null)
     {
         var result = mode switch
         {
             Mode.Trace => TraceMode.Run(snippet),
             Mode.Recall => await RecallMode.RunAsync(snippet),
             Mode.Predict => PredictMode.Run(snippet),
-            _ => await BlankMode.RunAsync(snippet),
+            _ => await BlankMode.RunAsync(snippet, hint: hint),
         };
         var firstTry = mode switch
         {
@@ -759,7 +789,7 @@ public static class Program
         }
         var (box, due) = workspace.Store.Advance(snippet.Id, result.Passed, today);
         var days = due.DayNumber - today.DayNumber;
-        var next = ModeFor(box, snippet).ToString().ToLowerInvariant();
+        var next = Label(box, ModeFor(box, snippet));
         AnsiConsole.MarkupLine($"{verdict}  {Markup.Escape(result.Note)}  ·  {next} next, in {days} day{(days == 1 ? "" : "s")}");
     }
 
@@ -786,7 +816,7 @@ public static class Program
             var weakest = bits.Where(b => b.Asked >= 5).OrderBy(b => b.Accuracy).FirstOrDefault();
             AnsiConsole.MarkupLine($"[bold]bits[/] last 7 days {asked} · {Pct((double)correct / asked)} · {bits.Sum(b => b.MeanSeconds * b.Asked) / asked:0.0}s each{(weakest is null ? "" : $" · weakest {weakest.Kind} {Pct(weakest.Accuracy)}")}");
         }
-        var boxTable = new Table().Border(TableBorder.Simple).AddColumn("").AddColumn("box1 recall").AddColumn("box2 blank").AddColumn("box3").AddColumn("box4").AddColumn("box5");
+        var boxTable = new Table().Border(TableBorder.Simple).AddColumn("").AddColumn("box1 cold try").AddColumn("box2 blank").AddColumn("box3").AddColumn("box4").AddColumn("box5");
         foreach (var language in Languages.All)
         {
             var mine = cards.Where(c => workspace.Find(c.Id)!.Language == language).ToList();

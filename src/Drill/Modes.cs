@@ -305,7 +305,7 @@ public static class RecallMode
             }
             reading += looked.Value;
 
-            var header = new List<string> { tries == 0 ? "Write it from memory." : $"Write it from memory · try {tries + 1}" };
+            var header = new List<string> { (byTests ? "Write it your way; the tests decide." : "Write it back; no tests for this one, so it has to match.") + (tries == 0 ? "" : $" · try {tries + 1}") };
             if (snippet.Spec.Length > 0)
             {
                 header.Add(snippet.Spec);
@@ -378,7 +378,7 @@ public static class RecallMode
         Console.Clear();
         Ui.Heading(snippet, "recall");
         AnsiConsole.Write(new Panel(new Text(snippet.Code)).Border(BoxBorder.Rounded).Header(tries == 0 ? "[grey] read it [/]" : "[grey] read it again [/]"));
-        AnsiConsole.MarkupLine("[grey]Take the time you need. Enter hides it and you write it. Esc gives up.[/]");
+        AnsiConsole.MarkupLine("[grey]Take the time you need; hold the idea, not the text. Enter hides it and you write it. Esc gives up.[/]");
         var clock = Stopwatch.StartNew();
         Console.CursorVisible = false;
         try
@@ -424,10 +424,14 @@ public static class RecallMode
 /// weekly number.
 public static class BlankMode
 {
-    public static async Task<AttemptResult> RunAsync(Snippet snippet, TimeSpan? timeLimit = null)
+    public static async Task<AttemptResult> RunAsync(Snippet snippet, TimeSpan? timeLimit = null, string? hint = null)
     {
         var deadline = timeLimit is null ? (DateTime?)null : DateTime.UtcNow + timeLimit.Value;
         var header = new List<string> { snippet.Spec };
+        if (hint is not null)
+        {
+            header.Add(hint);
+        }
         if (timeLimit is not null)
         {
             header.Add($"interview mode: {timeLimit.Value.TotalMinutes:0} minutes, no hints, one submission");
