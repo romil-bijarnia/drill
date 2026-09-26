@@ -38,6 +38,7 @@ public sealed class TextBox
     public string? Run(DateTime? deadline = null)
     {
         Console.Clear();
+        Console.Write(Ansi.BarCursor);
         Console.CursorVisible = true;
         try
         {
@@ -79,6 +80,7 @@ public sealed class TextBox
         finally
         {
             Console.Write(Ansi.Reset);
+            Console.Write(Ansi.DefaultCursor);
             Console.Write("\e[J");
         }
     }

@@ -11,8 +11,16 @@ internal static class Ansi
     public const string Dim = "\e[2m";
     public const string Green = "\e[32m";
     public const string Red = "\e[31;4m";
-    public const string Cursor = "\e[7m";
     public const string ClearLine = "\e[K";
+
+    /// A thin bar caret (DECSCUSR 6, plus iTerm2's own sequence), restored on the way out.
+    public static string BarCursor => Environment.GetEnvironmentVariable("TERM_PROGRAM") == "iTerm.app"
+        ? "\e[6 q\e]1337;CursorShape=1\a"
+        : "\e[6 q";
+
+    public static string DefaultCursor => Environment.GetEnvironmentVariable("TERM_PROGRAM") == "iTerm.app"
+        ? "\e[0 q\e]1337;CursorShape=0\a"
+        : "\e[0 q";
 }
 
 /// Trace: the reference sits on screen in dim grey and you type over it. Each key turns
@@ -38,12 +46,27 @@ public static class TraceMode
         AnsiConsole.MarkupLine("[grey]Type over the code. Enter ends a line, Tab indents, Backspace fixes, Esc gives up.[/]");
         AnsiConsole.WriteLine();
         var top = Ui.CurrentRow();
-        Console.CursorVisible = false;
+        var width = Ui.Width();
+        var statusRow = top + BlockRows(target, width) + 1;
+        Console.Write(Ansi.BarCursor);
+        Console.CursorVisible = true;
         try
         {
-            Render(target, typed, position, top);
+            Render(target, typed, position, top, width);
             while (!(position == target.Length && AllCorrect(target, typed)))
             {
+                // Poll instead of blocking so the clock under the code keeps moving.
+                var lastTick = DateTime.MinValue;
+                while (!Console.KeyAvailable)
+                {
+                    if ((DateTime.UtcNow - lastTick).TotalMilliseconds >= 50)
+                    {
+                        lastTick = DateTime.UtcNow;
+                        DrawStatus(statusRow, clock, keystrokes, correct, position, target.Length);
+                        PlaceCaret(target, position, top, width);
+                    }
+                    Thread.Sleep(15);
+                }
                 var key = Console.ReadKey(intercept: true);
                 if (key.Key == ConsoleKey.Escape)
                 {
@@ -65,7 +88,7 @@ public static class TraceMode
                             auto[position] = false;
                         } while (wasAuto && position > 0);
                     }
-                    Render(target, typed, position, top);
+                    Render(target, typed, position, top, width);
                     continue;
                 }
                 if (position >= target.Length)
@@ -92,7 +115,7 @@ public static class TraceMode
                         typed[position] = '\t';
                         position++;
                     }
-                    Render(target, typed, position, top);
+                    Render(target, typed, position, top, width);
                     continue;
                 }
 
@@ -117,21 +140,22 @@ public static class TraceMode
                         position++;
                     }
                 }
-                Render(target, typed, position, top);
+                Render(target, typed, position, top, width);
             }
         }
         finally
         {
-            Console.CursorVisible = true;
             Console.Write(Ansi.Reset);
-            Console.Write("\n\n");
+            Console.Write(Ansi.DefaultCursor);
+            Console.CursorVisible = true;
+            Console.Write($"\e[{statusRow + 1};1H{Ansi.ClearLine}\n");
         }
 
         var seconds = clock?.Elapsed.TotalSeconds ?? 0;
         var accuracy = keystrokes == 0 ? 0 : (double)correct / keystrokes;
         var passed = !abandoned && accuracy >= PassAccuracy;
         var wpm = seconds > 0 ? (int)Math.Round(target.Length / 5.0 / (seconds / 60.0)) : 0;
-        var note = abandoned ? "abandoned" : $"{accuracy:P0} accuracy · {seconds:0}s · {wpm} wpm";
+        var note = abandoned ? "abandoned" : $"{accuracy:P0} accuracy · {seconds:0.000}s · {wpm} wpm";
         return new AttemptResult(Mode.Trace, passed, seconds, accuracy, 1, abandoned, note);
     }
 
@@ -147,7 +171,7 @@ public static class TraceMode
         return true;
     }
 
-    private static void Render(string target, char?[] typed, int position, int top)
+    private static void Render(string target, char?[] typed, int position, int top, int width)
     {
         var output = new System.Text.StringBuilder();
         output.Append("\e[").Append(top + 1).Append(";1H");
@@ -155,11 +179,7 @@ public static class TraceMode
         {
             var expected = target[i];
             string style;
-            if (i == position)
-            {
-                style = Ansi.Cursor;
-            }
-            else if (typed[i] is null)
+            if (typed[i] is null || i == position)
             {
                 style = Ansi.Dim;
             }
@@ -184,6 +204,60 @@ public static class TraceMode
         }
         output.Append(Ansi.ClearLine);
         Console.Write(output.ToString());
+        PlaceCaret(target, position, top, width);
+    }
+
+    /// Puts the terminal cursor on the cell of the next expected character, so the caret
+    /// the user sees is the terminal's own thin bar rather than a painted block.
+    private static void PlaceCaret(string target, int position, int top, int width)
+    {
+        var row = top;
+        var col = 0;
+        for (var i = 0; i < position && i < target.Length; i++)
+        {
+            if (target[i] == '\n')
+            {
+                row++;
+                col = 0;
+                continue;
+            }
+            col++;
+            if (col >= width)
+            {
+                row++;
+                col = 0;
+            }
+        }
+        Console.Write($"\e[{row + 1};{col + 1}H");
+    }
+
+    /// Rows the code block occupies on screen, counting the end-of-line glyph and wraps.
+    private static int BlockRows(string target, int width)
+    {
+        var rows = 0;
+        foreach (var line in target.Split('\n'))
+        {
+            rows += Math.Max(1, (line.Length + 1 + width - 1) / width);
+        }
+        return rows;
+    }
+
+    private static void DrawStatus(int statusRow, Stopwatch? clock, int keystrokes, int correct, int position, int total)
+    {
+        var elapsed = clock?.Elapsed ?? TimeSpan.Zero;
+        string text;
+        if (clock is null)
+        {
+            text = "00:00.000 · start typing";
+        }
+        else
+        {
+            var accuracy = keystrokes == 0 ? 1.0 : (double)correct / keystrokes;
+            var wpm = elapsed.TotalSeconds > 0 ? (int)Math.Round(position / 5.0 / (elapsed.TotalSeconds / 60.0)) : 0;
+            var colour = accuracy >= PassAccuracy ? Ansi.Green : "\e[33m";
+            text = $"{elapsed:mm\\:ss\\.fff} · {colour}{accuracy:P0}{Ansi.Reset}{Ansi.Dim} · {wpm} wpm · {position}/{total}";
+        }
+        Console.Write($"\e[{statusRow + 1};1H{Ansi.Dim}{text}{Ansi.Reset}{Ansi.ClearLine}");
     }
 }
 
@@ -254,7 +328,7 @@ public static class RecallMode
             }
             AnsiConsole.Write(table);
         }
-        var note = passed ? $"exact · {clock.Elapsed.TotalSeconds:0}s" : $"{distance} edits away · {clock.Elapsed.TotalSeconds:0}s";
+        var note = passed ? $"exact · {clock.Elapsed.TotalSeconds:0.000}s" : $"{distance} edits away · {clock.Elapsed.TotalSeconds:0.000}s";
         return new AttemptResult(Mode.Recall, passed, clock.Elapsed.TotalSeconds, null, 1, false, note);
     }
 }
@@ -316,7 +390,7 @@ public static class BlankMode
             if (result.AllPassed)
             {
                 clock.Stop();
-                var note = tries == 1 ? $"all tests · first try · {clock.Elapsed.TotalSeconds:0}s" : $"all tests · try {tries} · {clock.Elapsed.TotalSeconds:0}s";
+                var note = tries == 1 ? $"all tests · first try · {clock.Elapsed.TotalSeconds:0.000}s" : $"all tests · try {tries} · {clock.Elapsed.TotalSeconds:0.000}s";
                 return new AttemptResult(Mode.Blank, true, clock.Elapsed.TotalSeconds, null, tries, false, note);
             }
             if (timeLimit is not null)
@@ -384,6 +458,18 @@ internal static class Ui
         var box = new TextBox(header, initial, snippet.Language);
         var text = box.Run(deadline);
         return (text, box.TimedOut);
+    }
+
+    public static int Width()
+    {
+        try
+        {
+            return Math.Max(40, Console.WindowWidth);
+        }
+        catch
+        {
+            return 120;
+        }
     }
 
     /// The terminal's current row, without trusting Console.CursorTop on odd terminals.
