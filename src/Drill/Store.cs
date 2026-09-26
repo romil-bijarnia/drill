@@ -67,6 +67,12 @@ public sealed class Store : IDisposable
                 answer     TEXT NOT NULL,
                 given      TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS machine (
+                task       TEXT PRIMARY KEY,
+                done_at    TEXT NOT NULL,
+                seconds    REAL NOT NULL,
+                lines      INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS work (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
                 project_id TEXT NOT NULL,
@@ -295,6 +301,27 @@ public sealed class Store : IDisposable
             stats.Add(new BitsStat(reader.GetString(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetDouble(3)));
         }
         return stats;
+    }
+
+    public HashSet<string> MachineDone()
+    {
+        var done = new HashSet<string>();
+        using var command = _connection.CreateCommand();
+        command.CommandText = "SELECT task FROM machine";
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            done.Add(reader.GetString(0));
+        }
+        return done;
+    }
+
+    public void MachineComplete(string task, DateTime doneAt, double seconds, int lines)
+    {
+        Execute(
+            "INSERT INTO machine (task, done_at, seconds, lines) VALUES ($task, $at, $seconds, $lines) " +
+            "ON CONFLICT(task) DO UPDATE SET done_at = excluded.done_at, seconds = excluded.seconds, lines = excluded.lines",
+            ("$task", task), ("$at", doneAt.ToString("o")), ("$seconds", seconds), ("$lines", lines));
     }
 
     public int SessionDays()

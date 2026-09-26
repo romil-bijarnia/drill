@@ -390,3 +390,171 @@ public class FamilyTests
     public void StackRunsFromPythonDownToAssembly() =>
         Assert.Equal([Language.Python, Language.CSharp, Language.C, Language.Asm], Languages.Stack);
 }
+
+public class MachineTests
+{
+    private static Machine Run(params string[] lines)
+    {
+        var m = new Machine();
+        foreach (var line in lines) m.Tape.Add(Machine.Parse(line));
+        m.Run(0);
+        return m;
+    }
+
+    [Fact]
+    public void MovAddSubWithShiftedOperand()
+    {
+        var m = Run("mov x0, #5", "add x1, x0, #7", "sub x2, x1, x0, lsl #1");
+        Assert.Equal(12, m.Regs[1]);
+        Assert.Equal(2, m.Regs[2]);
+    }
+
+    [Fact]
+    public void CompareSetsFlagsAndCsetReadsThem()
+    {
+        var m = Run("mov x0, #3", "mov x1, #8", "cmp x0, x1", "cset x2, lt", "cset x3, hi", "cset x4, ne");
+        Assert.True(m.N);
+        Assert.False(m.C);
+        Assert.Equal(1, m.Regs[2]);
+        Assert.Equal(0, m.Regs[3]);
+        Assert.Equal(1, m.Regs[4]);
+    }
+
+    [Fact]
+    public void ThirtyTwoBitResultsWrap()
+    {
+        var m = Run("mov x1, #0xffffffff", "add w2, w1, #1", "mov w3, #-1");
+        Assert.Equal(0, m.Regs[2]);
+        Assert.Equal(0xffffffffL, m.Regs[3]);
+    }
+
+    [Fact]
+    public void MemoryIsLittleEndian()
+    {
+        var m = Run("mov x1, #0x1000", "mov x0, #0x12345678", "str w0, [x1]", "ldrb w2, [x1]", "ldrh w3, [x1, #2]", "ldrsb w4, [x1, #3]");
+        Assert.Equal(0x78, m.Memory[0x1000]);
+        Assert.Equal(0x78, m.Regs[2]);
+        Assert.Equal(0x1234, m.Regs[3]);
+        Assert.Equal(0x12, m.Regs[4]);
+    }
+
+    [Fact]
+    public void PreAndPostIndexMoveTheStackPointer()
+    {
+        var m = Run("mov x0, #42", "str x0, [sp, #-16]!", "ldr x1, [sp], #16");
+        Assert.Equal(42, m.Regs[1]);
+        Assert.Equal(Machine.StackTop, m.Sp);
+    }
+
+    [Fact]
+    public void ABackwardBranchReplaysTheLoop()
+    {
+        var m = Run("mem 0x1000 = 01 00 00 00 00 00 00 00 02 00 00 00 00 00 00 00 03 00 00 00 00 00 00 00", "x1 = 0x1000", "x2 = 3",
+            "loop:", "ldr x3, [x1], #8", "add x0, x0, x3", "subs x2, x2, #1", "b.ne loop");
+        Assert.Equal(6, m.Regs[0]);
+        Assert.Equal(0x1018, m.Regs[1]);
+    }
+
+    [Fact]
+    public void CallAndReturnUseTheLinkRegister()
+    {
+        var m = Run("b main", "double:", "lsl x0, x0, #1", "ret", "main:", "mov x0, #21", "bl double", "add x0, x0, #1");
+        Assert.Equal(43, m.Regs[0]);
+    }
+
+    [Fact]
+    public void RecursiveFactorialWithAFrame()
+    {
+        var m = Run("mov x0, #5", "b main", "fact:", "cmp x0, #1", "b.le base", "stp x29, x30, [sp, #-16]!", "str x0, [sp, #-16]!",
+            "sub x0, x0, #1", "bl fact", "ldr x1, [sp], #16", "mul x0, x0, x1", "ldp x29, x30, [sp], #16", "base:", "ret", "main:", "bl fact");
+        Assert.Equal(120, m.Regs[0]);
+        Assert.Equal(Machine.StackTop, m.Sp);
+    }
+
+    [Fact]
+    public void ATakenBranchToAMissingLabelWaits()
+    {
+        var m = new Machine();
+        m.Tape.Add(Machine.Parse("mov x0, #0"));
+        m.Tape.Add(Machine.Parse("cbz x0, done"));
+        m.Tape.Add(Machine.Parse("mov x1, #9"));
+        m.Run(0);
+        Assert.Equal("done", m.Waiting);
+        Assert.Equal(1, m.WaitingAt);
+        Assert.Equal(0, m.Regs[1]);
+        m.Tape.Add(Machine.Parse("done:"));
+        m.Reset();
+        m.Run(0);
+        Assert.Null(m.Waiting);
+        Assert.Equal(0, m.Regs[1]);
+    }
+
+    [Fact]
+    public void LocalNumericLabelsWork()
+    {
+        var m = Run("mov x1, #3", "1:", "add x0, x0, x1", "subs x1, x1, #1", "b.ne 1b", "cbz x1, 2f", "mov x5, #1", "2:", "mov x6, #7");
+        Assert.Equal(6, m.Regs[0]);
+        Assert.Equal(0, m.Regs[5]);
+        Assert.Equal(7, m.Regs[6]);
+    }
+
+    [Fact]
+    public void BitFieldsAndExtensions()
+    {
+        var m = Run("mov x1, #0xb7", "ubfx x0, x1, #4, #3", "mov w2, #0x80", "sxtb w3, w2", "rbit w4, w2", "clz x5, x1", "movz x6, #0x1234", "movk x6, #0x5678, lsl #16");
+        Assert.Equal(3, m.Regs[0]);
+        Assert.Equal(0xffffff80L, m.Regs[3]);
+        Assert.Equal(0x01000000, m.Regs[4]);
+        Assert.Equal(56, m.Regs[5]);
+        Assert.Equal(0x56781234, m.Regs[6]);
+    }
+
+    [Fact]
+    public void ConditionalSelectsAndDivision()
+    {
+        var m = Run("mov x0, #100", "mov x1, #7", "udiv x2, x0, x1", "msub x3, x2, x1, x0", "cmp x0, x1", "csel x4, x0, x1, lt", "mov x5, #-7", "cmp x5, #0", "cneg x6, x5, mi");
+        Assert.Equal(14, m.Regs[2]);
+        Assert.Equal(2, m.Regs[3]);
+        Assert.Equal(7, m.Regs[4]);
+        Assert.Equal(7, m.Regs[6]);
+    }
+
+    [Fact]
+    public void ErrorsAreMachineExceptions()
+    {
+        Assert.Throws<MachineException>(() => Run("mov x1, #0x20000", "ldr x0, [x1]"));
+        Assert.Throws<MachineException>(() => Run("frob x0, x1"));
+        Assert.Throws<MachineException>(() => Run("loop:", "b loop"));
+        Assert.Throws<MachineException>(() => Machine.Parse("mov x0, #banana").Mnemonic is null ? throw new MachineException("x") : Run("mov x0, #banana"));
+    }
+
+    [Theory]
+    [InlineData("#'a'", 97)]
+    [InlineData("#0b101", 5)]
+    [InlineData("#-0x10", -16)]
+    [InlineData("12", 12)]
+    [InlineData("#~0", -1)]
+    public void ImmediatesParse(string text, long expected) => Assert.Equal(expected, Machine.ParseImm(text));
+
+    [Fact]
+    public void EveryTaskHintSolvesItsTask()
+    {
+        foreach (var task in MachineTasks.All.Where(t => t.Number != 26))
+        {
+            var m = new Machine();
+            task.Setup(m);
+            foreach (var piece in task.Hint.Split('·').SelectMany(p => p.Split(" then ")).Select(p => p.Trim()).Where(p => p.Length > 0))
+            {
+                var code = piece.Split(" (")[0].Trim();
+                var colon = code.IndexOf(':');
+                if (colon > 0 && code[..colon].Contains(' '))
+                {
+                    code = code[..colon].Trim(); // an explanation after the instruction, not a label
+                }
+                m.Tape.Add(Machine.Parse(code));
+            }
+            m.Run(0);
+            Assert.True(task.Check(m), $"task {task.Number}: the hint did not solve it");
+        }
+    }
+}

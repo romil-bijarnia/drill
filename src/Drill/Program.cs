@@ -23,6 +23,7 @@ public static class Program
                 "blank" => await PracticeAsync(Mode.Blank, rest),
                 "predict" => await PracticeAsync(Mode.Predict, rest),
                 "bits" => Bits(rest),
+                "machine" => MachineCommand(rest),
                 "compile" => await CompileAsync(rest),
                 "list" or "ls" => List(rest),
                 "stats" => Stats(),
@@ -231,6 +232,13 @@ public static class Program
         AnsiConsole.Write(table);
         AnsiConsole.MarkupLine("[grey]✓ passed at least once · [cyan]drill down <problem>[/] takes one problem from Python to ARM64[/]");
         return 0;
+    }
+
+    private static int MachineCommand(string[] args)
+    {
+        RequireTerminal();
+        using var workspace = Workspace.Open();
+        return MachineMode.Run(workspace.Store, args.FirstOrDefault());
     }
 
     private static int Bits(string[] args)
@@ -675,6 +683,7 @@ public static class Program
               drill families          every problem that exists in several languages, and how far down you are
               drill compile [c-id]    clang's ARM64 for a C snippet, then your own ARM64 for the same tests
               drill bits [topic]      quick-fire hex, twos, shift, mask, endian, pop, arm; never runs out
+              drill machine [n|free]  a live ARM64: registers and memory on screen, every line runs as you type it; 30 tasks in order
               drill interview [lang|id] [minutes]  one blank problem, 45 min default, one submission
               drill list [lang] [tag] every snippet with its box, next date and last results
               drill projects          real builds with steps: progress and hours
@@ -807,6 +816,11 @@ public static class Program
         if (predicted.Count > 0)
         {
             AnsiConsole.MarkupLine($"[bold]predict[/] last 7 days {predicted.Count} snippets · {Pct(predicted.Average(a => a.Accuracy!.Value))} of calls right");
+        }
+        var machineDone = store.MachineDone().Count;
+        if (machineDone > 0)
+        {
+            AnsiConsole.MarkupLine($"[bold]machine[/] {machineDone}/{MachineTasks.All.Length} tasks done");
         }
         var bits = store.BitsBetween(today.AddDays(-6), today);
         if (bits.Count > 0)

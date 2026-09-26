@@ -52,6 +52,23 @@ way down. `drill down strlen` sticks to one problem.
 at -O1, and then asks for your own ARM64 for the same tests, with the prototype taken from
 the C source. Any C snippet with tests can be taken down this way.
 
+## The machine
+
+`drill machine` is a live ARM64 on the screen: the registers, the flags, a window of
+memory and the tape of what you have typed. Type an instruction and it runs the moment you
+press Enter; whatever changed turns yellow. Set a register with `x1 = 5`, put bytes down
+with `mem 0x1000 = "hello"`. Labels work the way they do in a file: a backward branch
+replays the tape so you watch the loop go round, line by line; a forward branch waits
+until you type the label. `bl` and `ret` work, so do `stp`/`ldp` frames and recursion.
+`undo` takes back the last line, `reset` empties the tape, `save f.s` keeps it.
+
+It comes with thirty tasks in order, each a state to reach: put 12 in x1; add these two;
+double it with a shift; store a byte and watch it land; load a long with an offset, then
+with a scaled register; push and pop through sp; sum an array in a loop; strlen; fill;
+reverse; memcpy; a call with bl and ret; a callee-saved register; a recursive factorial
+with a frame. `hint` gives one hint, `skip` moves on, `drill machine free` is a blank
+machine, `drill machine 22` redoes a task. Progress shows in `drill stats`.
+
 ## Bits
 
 `drill bits` is quick-fire questions on what sits under the code: hex and binary, two's
@@ -73,6 +90,7 @@ drill down [problem]         one problem from Python down to ARM64
 drill families               the problems that exist in several languages
 drill compile [c-id]         clang's ARM64 for a C snippet, then your own
 drill bits [topic]           quick-fire hex, twos, shift, mask, endian, pop, arm
+drill machine [n|free]       a live ARM64 with thirty tasks; every line runs as you type it
 drill interview [lang|id] [minutes]   one blank problem, 45 min by default, one submission
 
 drill projects               real builds with steps: progress and hours
