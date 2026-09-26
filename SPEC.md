@@ -1,4 +1,6 @@
-# Reps
+# Reps — design
+
+Status: built (26 Sep 2026). This file is the design the trainer follows; README.md is how to use it.
 
 A local trainer that moves me from copying C# to producing it. Every session
 is a short set of reps. The tool measures one thing: can I write correct code

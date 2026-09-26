@@ -1,6 +1,6 @@
 # Progress
 
-Current stage: 1 (trace mode)
+The trainer keeps the real log in `reps.db` (`reps stats`). This file is for coach notes.
 
-| Date | Task | Time | Weakness to work on next |
-|------|------|------|--------------------------|
+| Date | Due | Passed | Weakness to work on next |
+|------|-----|--------|--------------------------|

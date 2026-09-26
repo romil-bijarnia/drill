@@ -4,3 +4,5 @@ obj/
 .vs/
 .idea/
 reps.db
+reps.db-journal
+.DS_Store

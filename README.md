@@ -1,36 +1,70 @@
 # Reps
 
-A local trainer that moves you from copying C# to producing it. Full design in
-SPEC.md. Coaching rules for Claude Code in CLAUDE.md. Session log in PROGRESS.md.
+A gym for writing C# from a blank file. Short daily sets; one number that matters.
 
-## Setup
+Three ways to practise a snippet, each harder than the last:
 
-Requires the .NET SDK (9 or later). Change `TargetFramework` in
-`src/Reps/Reps.csproj` if you are on a different major version.
+| Mode   | What you see                        | What you do                            | Pass                              |
+|--------|-------------------------------------|----------------------------------------|-----------------------------------|
+| Trace  | The code, dim, on screen            | Type over it; every key goes green/red | 97 % of keystrokes correct        |
+| Recall | The code for a few seconds, then nothing | Type it from memory                | Identical once whitespace is ignored |
+| Blank  | A one-line spec and the tests       | Write it; Ctrl+D compiles and runs     | Every test passes                 |
 
-    cd src/Reps
-    dotnet add package Spectre.Console
+Each snippet lives in a Leitner box from 1 to 5. Box 1 is practised in trace, box 2 in
+recall, boxes 3 to 5 in blank. A pass moves it up a box and it comes back in 1, 2, 4, 8
+or 16 days; a fail drops it to box 1. `reps` runs everything due today, at most fifteen.
+The scoreboard is the blank-mode first-try pass rate, week over week.
 
-Stage 2 and 3 packages, when you get there:
+## Use
 
-    dotnet add package Microsoft.Data.Sqlite
-    dotnet add package Microsoft.CodeAnalysis.CSharp.Scripting
+```
+reps                  today's session
+reps trace 015        one rep in a chosen mode (id optional: picks at random)
+reps recall 015
+reps blank 015
+reps list [tag]       every snippet: box, due date, last three results
+reps stats            streak, boxes, weekly blank first-try rate
+reps verify           every snippet's reference code passes its own tests
+reps new 046 Title    a new snippet file to fill in
+reps import File.cs   your own static methods, as trace/recall snippets
+```
 
-## Starting a session
+Recall and blank use a small built-in editor with nothing to help you: Ctrl+D submits,
+Esc gives up, Tab indents, Enter keeps the indentation. If you insist on an external
+editor, `REPS_EDITOR="nano"` or `REPS_EDITOR="code --wait"`; leave autocomplete off.
 
-From the repo root:
+## Snippets
 
-    claude
+One Markdown file each in `snippets/`: a small header, then the reference code.
 
-First message: "Read SPEC.md and PROGRESS.md. Start me on stage 1."
+```
+---
+id: 015
+title: Greatest common divisor
+tags: [algorithms, recursion]
+modes: [trace, recall, blank]
+spec: Greatest common divisor of two non-negative integers, recursively.
+tests:
+  - call: 'Gcd(12, 18)'
+    expect: '6'
+---
+public static int Gcd(int a, int b) => b == 0 ? a : Gcd(b, a % b);
+```
 
-`src/Reps/Program.cs` does not exist yet. Creating it is the first thing you do.
+`spec` is all blank mode shows. Each `call` is a C# expression evaluated with your code
+in scope (Roslyn scripting, in-process); it passes when the result's invariant
+`ToString()` equals `expect`. Snippets without tests are trace and recall only. Forty-five
+ship in the bank; add your own, and `reps verify` before you practise them.
 
-## Layout
+## Data
 
-    CLAUDE.md        coaching rules, read automatically by Claude Code
-    SPEC.md          the design: modes, scheduling, data, stack, build order
-    PROGRESS.md      one line per signed-off session
-    snippets/        one Markdown file per snippet (front matter + reference code)
-    src/Reps/    the trainer (yours to write)
-    tests/           test projects, when you add them
+`reps.db` (SQLite, git-ignored) in the repo root: `snippets` (box, next_due), `attempts`
+(mode, seconds, accuracy, passed, first_try), `sessions` (date, attempts,
+blank_first_try_rate). The root is `REPS_HOME`, else the nearest parent directory with a
+`snippets/` folder, else `~/Documents/reps`.
+
+## Build
+
+.NET 10 SDK. `dotnet build src/Reps`, `dotnet test tests/Reps.Tests`. Install as a
+command with `Tools/install.sh` (publishes to `~/.local/share/reps` and links `reps`
+into `~/.local/bin`).
