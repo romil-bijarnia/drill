@@ -283,37 +283,119 @@ public static class TraceMode
     }
 }
 
-/// Recall: the snippet shows for a few seconds, then disappears; you type it from memory
-/// and the trainer compares the two with formatting ignored.
+/// Recall: read the reference for as long as you need, hide it, then write it yourself.
+/// Where the snippet has tests, the tests decide, so a different but working version
+/// passes; without tests the comparison is exact once formatting is ignored. After a miss,
+/// r shows the reference again for another go; only the first go counts as a first try.
 public static class RecallMode
 {
-    public static AttemptResult Run(Snippet snippet)
+    public static async Task<AttemptResult> RunAsync(Snippet snippet)
+    {
+        var byTests = snippet.Tests.Count > 0 && Runner.Available(snippet.Language);
+        var text = "";
+        var tries = 0;
+        var reading = TimeSpan.Zero;
+        var clock = new Stopwatch();
+        while (true)
+        {
+            var looked = Show(snippet, tries);
+            if (looked is null)
+            {
+                return new AttemptResult(Mode.Recall, false, clock.Elapsed.TotalSeconds, null, Math.Max(1, tries), true, "abandoned");
+            }
+            reading += looked.Value;
+
+            var header = new List<string> { tries == 0 ? "Write it from memory." : $"Write it from memory · try {tries + 1}" };
+            if (snippet.Spec.Length > 0)
+            {
+                header.Add(snippet.Spec);
+            }
+            if (byTests)
+            {
+                header.Add("tests:");
+                header.AddRange(snippet.Tests.Select(t => $"  {t.Call}  =>  {t.Expect}"));
+            }
+            clock.Start();
+            var (edited, _) = Ui.Compose(snippet, "recall", header, text);
+            clock.Stop();
+            if (edited is null)
+            {
+                return new AttemptResult(Mode.Recall, false, clock.Elapsed.TotalSeconds, null, Math.Max(1, tries), true, "abandoned");
+            }
+            text = edited;
+            if (text.Trim().Length == 0)
+            {
+                return new AttemptResult(Mode.Recall, false, clock.Elapsed.TotalSeconds, null, Math.Max(1, tries), true, "nothing written");
+            }
+            tries++;
+
+            Console.Clear();
+            Ui.Heading(snippet, "recall");
+            bool passed;
+            string verdict;
+            if (byTests)
+            {
+                var result = await AnsiConsole.Status().StartAsync(
+                    "compiling and running the tests…",
+                    _ => Runner.EvaluateAsync(snippet, text, TimeSpan.FromSeconds(10)));
+                BlankMode.ShowResult(result);
+                passed = result.AllPassed;
+                verdict = passed ? "all tests" : "tests failed";
+            }
+            else
+            {
+                var distance = TextDiff.Levenshtein(TextDiff.Normalize(text, snippet.Language), TextDiff.Normalize(snippet.Code, snippet.Language));
+                passed = distance == 0;
+                verdict = passed ? "exact" : $"{distance} edits away";
+            }
+            var timing = $"read {reading.TotalSeconds:0}s · wrote {clock.Elapsed.TotalSeconds:0.000}s";
+            if (passed)
+            {
+                return new AttemptResult(Mode.Recall, true, clock.Elapsed.TotalSeconds, null, tries, false,
+                    $"{verdict} · {(tries == 1 ? "first try" : $"try {tries}")} · {timing}");
+            }
+            if (byTests)
+            {
+                AnsiConsole.Write(new Panel(new Text(snippet.Code)).Border(BoxBorder.Rounded).Header("[grey] reference [/]"));
+            }
+            else
+            {
+                ShowDiff(snippet, text);
+            }
+            AnsiConsole.MarkupLine("[grey]r to read it again and have another go · Enter to move on[/]");
+            var key = Console.ReadKey(intercept: true);
+            if (key.KeyChar is not ('r' or 'R'))
+            {
+                return new AttemptResult(Mode.Recall, false, clock.Elapsed.TotalSeconds, null, tries, false,
+                    $"{verdict} · {(tries == 1 ? "1 try" : $"{tries} tries")} · {timing}");
+            }
+        }
+    }
+
+    /// Shows the reference until Enter and returns how long it was on screen; null on Esc.
+    private static TimeSpan? Show(Snippet snippet, int tries)
     {
         Console.Clear();
         Ui.Heading(snippet, "recall");
-        var seconds = Math.Clamp(snippet.Code.Length / 10, 8, 30);
-        AnsiConsole.Write(new Panel(new Text(snippet.Code)).Border(BoxBorder.Rounded).Header("[grey] memorise [/]"));
-        AnsiConsole.MarkupLine("[grey]Enter hides it early. Esc gives up.[/]");
-        var deadline = DateTime.UtcNow.AddSeconds(seconds);
-        var abandoned = false;
+        AnsiConsole.Write(new Panel(new Text(snippet.Code)).Border(BoxBorder.Rounded).Header(tries == 0 ? "[grey] read it [/]" : "[grey] read it again [/]"));
+        AnsiConsole.MarkupLine("[grey]Take the time you need. Enter hides it and you write it. Esc gives up.[/]");
+        var clock = Stopwatch.StartNew();
         Console.CursorVisible = false;
         try
         {
-            while (DateTime.UtcNow < deadline)
+            while (true)
             {
-                var remaining = (int)Math.Ceiling((deadline - DateTime.UtcNow).TotalSeconds);
-                Console.Write($"\r{Ansi.Dim}hidden in {remaining,2}s{Ansi.Reset}{Ansi.ClearLine}");
+                Console.Write($"\r{Ansi.Dim}reading {clock.Elapsed:m\\:ss}{Ansi.Reset}{Ansi.ClearLine}");
                 if (Console.KeyAvailable)
                 {
                     var key = Console.ReadKey(intercept: true);
                     if (key.Key == ConsoleKey.Escape)
                     {
-                        abandoned = true;
-                        break;
+                        return null;
                     }
                     if (key.Key == ConsoleKey.Enter)
                     {
-                        break;
+                        return clock.Elapsed;
                     }
                 }
                 Thread.Sleep(100);
@@ -323,35 +405,17 @@ public static class RecallMode
         {
             Console.CursorVisible = true;
         }
-        if (abandoned)
-        {
-            return new AttemptResult(Mode.Recall, false, 0, null, 1, true, "abandoned");
-        }
+    }
 
-        var clock = Stopwatch.StartNew();
-        var (text, _) = Ui.Compose(snippet, "recall", ["Type it from memory."], "");
-        clock.Stop();
-        if (text is null)
+    private static void ShowDiff(Snippet snippet, string text)
+    {
+        var table = new Table().Border(TableBorder.Rounded).AddColumn("reference").AddColumn("yours");
+        foreach (var (expected, actual, same) in TextDiff.LineReport(snippet.Code, text, snippet.Language))
         {
-            return new AttemptResult(Mode.Recall, false, clock.Elapsed.TotalSeconds, null, 1, true, "abandoned");
+            var colour = same ? "green" : "red";
+            table.AddRow($"[{colour}]{Markup.Escape(expected)}[/]", $"[{colour}]{Markup.Escape(actual)}[/]");
         }
-
-        var distance = TextDiff.Levenshtein(TextDiff.Normalize(text, snippet.Language), TextDiff.Normalize(snippet.Code, snippet.Language));
-        var passed = distance == 0 && text.Trim().Length > 0;
-        Console.Clear();
-        Ui.Heading(snippet, "recall");
-        if (!passed)
-        {
-            var table = new Table().Border(TableBorder.Rounded).AddColumn("reference").AddColumn("yours");
-            foreach (var (expected, actual, same) in TextDiff.LineReport(snippet.Code, text, snippet.Language))
-            {
-                var colour = same ? "green" : "red";
-                table.AddRow($"[{colour}]{Markup.Escape(expected)}[/]", $"[{colour}]{Markup.Escape(actual)}[/]");
-            }
-            AnsiConsole.Write(table);
-        }
-        var note = passed ? $"exact · {clock.Elapsed.TotalSeconds:0.000}s" : $"{distance} edits away · {clock.Elapsed.TotalSeconds:0.000}s";
-        return new AttemptResult(Mode.Recall, passed, clock.Elapsed.TotalSeconds, null, 1, false, note);
+        AnsiConsole.Write(table);
     }
 }
 
@@ -430,7 +494,7 @@ public static class BlankMode
         }
     }
 
-    private static void ShowResult(EvalResult result)
+    internal static void ShowResult(EvalResult result)
     {
         if (!result.Compiled)
         {

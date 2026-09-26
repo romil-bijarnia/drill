@@ -1,22 +1,28 @@
 # Reps
 
-A gym for writing code from a blank file, in C#, Python, C and ARM64 assembly. Short daily
-sets, a grind mode that never runs out, real projects with timed work blocks, and one
+A gym for writing code from a blank file, in C#, Python, C and ARM64 assembly. One rep
+after another for as long as you want, real projects with timed work blocks, and one
 number that matters.
 
 ## Snippets: three ways to practise each one
 
-| Mode   | What you see                             | What you do                            | Pass                                 |
-|--------|------------------------------------------|----------------------------------------|--------------------------------------|
-| Trace  | The code, dim, on screen                 | Type over it; every key goes green/red | 97 % of keystrokes correct           |
-| Recall | The code for a few seconds, then nothing | Type it from memory                    | Identical once formatting is ignored |
-| Blank  | A one-line spec and the tests            | Write it; Ctrl+D compiles and runs     | Every test passes                    |
+| Mode   | What you see                             | What you do                                  | Pass                                                |
+|--------|------------------------------------------|----------------------------------------------|-----------------------------------------------------|
+| Recall | The code, for as long as you need        | Hide it, write it yourself; Ctrl+D runs the tests | Every test passes (exact match if there are none) |
+| Blank  | A one-line spec and the tests            | Write it; Ctrl+D compiles and runs           | Every test passes                                   |
+| Trace  | The code, dim, on screen                 | Type over it; every key goes green/red       | 97 % of keystrokes correct                          |
 
-Each snippet sits in a Leitner box from 1 to 5. Box 1 is practised in trace, box 2 in
-recall, boxes 3 to 5 in blank. A pass moves it up a box and it comes back in 1, 2, 4, 8
-or 16 days; a fail drops it to box 1. `reps` runs everything due today; q stops whenever
-you like, and `reps grind` keeps going after that. The scoreboard is the blank-mode
-first-try pass rate, week over week.
+Each snippet sits in a box from 1 to 5. Box 1, where every snippet starts and where a miss
+sends it back, is recall; boxes 2 to 5 are blank. A pass moves it up a box and it comes
+back after 2, 4, 8 or 16 days. `reps` serves one rep after another in that order: whatever
+is ready first, then the weakest, then the least recent, with no count to clear; q stops
+whenever you like. Trace is never scheduled: `reps trace asm` when the syntax is new to
+you. The scoreboard is the blank-mode first-try pass rate, week over week.
+
+Recall is not memorising. Read the reference until you understand it, hide it, and write
+a version that passes the tests; different names or a different approach are fine. After
+a miss, r shows the reference again for another go, and only the first go counts as a
+first try.
 
 Trace grades code, not spacing: indentation and the spaces between tokens fill in as you
 type the next character, stray spaces are ignored, and only Enter is required to end a
@@ -30,17 +36,18 @@ external editor; leave autocomplete off.
 ## Commands
 
 ```
-reps [lang]                 today's session, everything due
-reps grind [lang]           endless reps, weakest first, until you press q
+reps [lang]                 one rep after another, q stops whenever you like
+reps recall [id|lang]       read it, hide it, write it; the tests decide
+reps blank [id|lang]        the spec and the tests only
+reps trace [id|lang]        type over the reference
 reps interview [lang|id] [minutes]   one blank problem, 45 min by default, one submission
-reps trace | recall | blank [id|lang] one rep in a chosen mode (random if no id)
 
 reps projects               real builds with steps: progress and hours
 reps project <id>           one project's goal, steps and time
 reps project new <id> <title>
 reps work [id] [step]       timed block on the next open step; Enter marks it done
 
-reps list [lang] [tag]      every snippet: box, due date, last three results
+reps list [lang] [tag]      every snippet: box, next date, last three results
 reps stats                  streak, boxes per language, weekly blank first-try rate, project hours
 reps verify [lang|id]       reference code passes its own tests
 reps new <lang-id> <title>  a new snippet file to fill in (cs-, py-, c-, asm-)

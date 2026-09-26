@@ -17,15 +17,13 @@ public static class Program
         {
             return command switch
             {
-                "session" or "go" or "today" => await SessionAsync(rest),
+                "session" or "go" or "today" or "grind" => await FlowAsync(null, rest),
                 "trace" => await PracticeAsync(Mode.Trace, rest),
                 "recall" => await PracticeAsync(Mode.Recall, rest),
                 "blank" => await PracticeAsync(Mode.Blank, rest),
                 "list" or "ls" => List(rest),
                 "stats" => Stats(),
-                "due" => Due(),
                 "verify" => await VerifyAsync(rest),
-                "grind" => await GrindAsync(rest),
                 "interview" => await InterviewAsync(rest),
                 "projects" => Projects(),
                 "project" => Project(rest),
@@ -46,69 +44,39 @@ public static class Program
 
     // MARK: commands
 
-    private static async Task<int> SessionAsync(string[] args)
+    /// The session: one rep after another until you press q. Nothing is owed and there is
+    /// no count to clear; the order simply puts first whatever is ready to come back, then
+    /// the weakest, then the least recent, with no repeat inside the last eight. Each rep
+    /// runs in the mode its box calls for, or in the one mode you asked for.
+    private static async Task<int> FlowAsync(Mode? fixedMode, string[] args)
     {
         RequireTerminal();
         using var workspace = Workspace.Open();
         var today = Workspace.Today;
         var language = LanguageFilter(args);
-        var due = workspace.Store.Due(today)
-            .Select(card => (card, snippet: workspace.Find(card.Id)))
-            .Where(pair => pair.snippet is not null && (language is null || pair.snippet.Language == language))
+        var pool = workspace.Snippets
+            .Where(s => language is null || s.Language == language)
+            .Where(s => fixedMode is null || (s.Supports(fixedMode.Value) && (fixedMode != Mode.Blank || Runner.Available(s.Language))))
             .ToList();
-        if (due.Count == 0)
-        {
-            AnsiConsole.MarkupLine("[green]Nothing due today.[/] Keep going with [cyan]reps grind[/], a timed rep with [cyan]reps interview[/], or a project block with [cyan]reps work[/]. Scoreboard: [cyan]reps stats[/].");
-            ProjectsLine(workspace);
-            return 0;
-        }
-        var scope = language is null ? "" : $" · {language.Value.DisplayName()}";
-        AnsiConsole.MarkupLine($"[bold]{due.Count} due[/]{scope} · streak {workspace.Store.Streak(today)} days · Enter to start, q to stop between reps");
-        ProjectsLine(workspace);
-        var index = 0;
-        foreach (var (card, snippet) in due)
-        {
-            index++;
-            var mode = ModeFor(card.Box, snippet!);
-            AnsiConsole.MarkupLine($"[grey]{index}/{due.Count}[/] {Markup.Escape(snippet!.Id)} {Markup.Escape(snippet.Title)} [grey]{snippet.Language.DisplayName()}[/] · box {card.Box} · [yellow]{mode.ToString().ToLowerInvariant()}[/]");
-            var key = Console.ReadKey(intercept: true);
-            if (key.KeyChar is 'q' or 'Q')
-            {
-                break;
-            }
-            var result = await RunAsync(mode, snippet, workspace, today);
-            Report(result, workspace, snippet, today);
-        }
-        workspace.Store.UpsertSession(today);
-        Summary(workspace, today);
-        AnsiConsole.MarkupLine("[grey]Still going? [cyan]reps grind[/] never runs out.[/]");
-        return 0;
-    }
-
-    /// Endless reps for the days you want to grind: due snippets first, then the weakest
-    /// boxes, each in the mode its box calls for, until you press q.
-    private static async Task<int> GrindAsync(string[] args)
-    {
-        RequireTerminal();
-        using var workspace = Workspace.Open();
-        var today = Workspace.Today;
-        var language = LanguageFilter(args);
-        var pool = workspace.Snippets.Where(s => language is null || s.Language == language).ToList();
         if (pool.Count == 0)
         {
-            throw new RepsException("no snippets to grind");
+            var scopeName = language is null ? "" : language.Value.DisplayName() + " ";
+            throw new RepsException(fixedMode is null ? $"no {scopeName}snippets to practise" : $"no {scopeName}snippets can run in {fixedMode.Value.ToString().ToLowerInvariant()} mode here");
         }
+        var title = fixedMode?.ToString().ToLowerInvariant() ?? "reps";
+        var scope = language is null ? "" : $" · {language.Value.DisplayName()}";
+        AnsiConsole.MarkupLine($"[bold]{title}[/]{scope} · streak {workspace.Store.Streak(today)} days · Enter for the next rep, q to stop");
+        ProjectsLine(workspace);
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var reps = 0;
         var passes = 0;
         var recent = new Queue<string>();
-        AnsiConsole.MarkupLine($"[bold]grind[/]{(language is null ? "" : $" · {language.Value.DisplayName()}")} · Enter for the next rep, q to stop");
         while (true)
         {
-            var snippet = NextForGrind(workspace, pool, recent, today);
+            var snippet = Next(workspace, pool, recent, today);
             var card = workspace.Store.GetCard(snippet.Id);
-            var mode = ModeFor(card?.Box ?? 1, snippet);
-            AnsiConsole.MarkupLine($"[grey]rep {reps + 1}[/] {Markup.Escape(snippet.Id)} {Markup.Escape(snippet.Title)} [grey]{snippet.Language.DisplayName()}[/] · box {card?.Box ?? 1} · [yellow]{mode.ToString().ToLowerInvariant()}[/]");
+            var mode = fixedMode ?? ModeFor(card?.Box ?? 1, snippet);
+            AnsiConsole.MarkupLine($"[grey]rep {reps + 1}[/] {Markup.Escape(snippet.Id)} {Markup.Escape(snippet.Title)} [grey]{snippet.Language.DisplayName()}[/] · [yellow]{mode.ToString().ToLowerInvariant()}[/]");
             var key = Console.ReadKey(intercept: true);
             if (key.KeyChar is 'q' or 'Q' || key.Key == ConsoleKey.Escape)
             {
@@ -127,17 +95,16 @@ public static class Program
         return 0;
     }
 
-    private static Snippet NextForGrind(Workspace workspace, List<Snippet> pool, Queue<string> recent, DateOnly today)
+    private static Snippet Next(Workspace workspace, List<Snippet> pool, Queue<string> recent, DateOnly today)
     {
         var cards = workspace.Store.AllCards().ToDictionary(c => c.Id);
-        var ranked = pool
+        return pool
             .Where(s => !recent.Contains(s.Id) || pool.Count <= recent.Count)
             .OrderBy(s => cards.TryGetValue(s.Id, out var c) && c.NextDue <= today ? 0 : 1)
             .ThenBy(s => cards.TryGetValue(s.Id, out var c) ? c.Box : 1)
             .ThenBy(s => workspace.Store.RecentAttempts(s.Id, 1).FirstOrDefault()?.StartedAt ?? DateTime.MinValue)
             .ThenBy(_ => System.Random.Shared.Next())
-            .ToList();
-        return ranked[0];
+            .First();
     }
 
     /// Interview mode: one blank-mode problem, 45 minutes by default, one submission.
@@ -297,14 +264,18 @@ public static class Program
         AnsiConsole.MarkupLine("[grey]projects:[/] " + string.Join(" · ", open.Take(4).Select(p => $"{Markup.Escape(p.Id)} ({p.Steps.Count - p.DoneCount} left)")) + " [grey]→ reps work <id>[/]");
     }
 
+    /// One snippet in a chosen mode when an id is given; otherwise the session in that mode.
     private static async Task<int> PracticeAsync(Mode mode, string[] args)
     {
+        var id = args.FirstOrDefault(a => !Languages.TryParse(a, out _));
+        if (id is null)
+        {
+            return await FlowAsync(mode, args);
+        }
         RequireTerminal();
         using var workspace = Workspace.Open();
         var today = Workspace.Today;
-        var language = LanguageFilter(args);
-        var id = args.FirstOrDefault(a => !Languages.TryParse(a, out _));
-        var snippet = id is not null ? workspace.Require(id) : workspace.Random(mode, language);
+        var snippet = workspace.Require(id);
         if (!snippet.Supports(mode))
         {
             throw new RepsException($"{snippet.Id} is not marked for {mode.ToString().ToLowerInvariant()} mode (modes: {string.Join(", ", snippet.Modes)}{(snippet.Tests.Count == 0 ? ", no tests" : "")})");
@@ -326,7 +297,7 @@ public static class Program
         var filter = args.FirstOrDefault(a => !Languages.TryParse(a, out _));
         var today = Workspace.Today;
         var table = new Table().Border(TableBorder.Rounded)
-            .AddColumn("id").AddColumn("title").AddColumn("lang").AddColumn("tags").AddColumn("box").AddColumn("due").AddColumn("last");
+            .AddColumn("id").AddColumn("title").AddColumn("lang").AddColumn("tags").AddColumn("box").AddColumn("next").AddColumn("last");
         foreach (var snippet in workspace.Snippets.Where(s => (language is null || s.Language == language) && (filter is null || s.Tags.Contains(filter) || s.Id == filter)))
         {
             var card = workspace.Store.GetCard(snippet.Id);
@@ -341,15 +312,6 @@ public static class Program
         {
             AnsiConsole.MarkupLine($"[red]{Markup.Escape(problem)}[/]");
         }
-        return 0;
-    }
-
-    private static int Due()
-    {
-        using var workspace = Workspace.Open();
-        var today = Workspace.Today;
-        var due = workspace.Store.Due(today).Where(c => workspace.Find(c.Id) is not null).ToList();
-        AnsiConsole.MarkupLine(due.Count == 0 ? "[green]0 due[/]" : $"[bold]{due.Count} due[/]: " + string.Join(", ", due.Take(15).Select(c => c.Id)));
         return 0;
     }
 
@@ -500,18 +462,16 @@ public static class Program
         AnsiConsole.WriteLine("""
             reps — a gym for writing code from a blank file: C#, Python, C, ARM64 asm
 
-              reps [lang]          today's session: everything due, q stops whenever you like
-              reps trace [id|lang] type over the reference (box 1 work)
-              reps recall [id|lang] see it, then type it from memory (box 2)
-              reps blank [id|lang] spec and tests only; write it, tests run (box 3+)
-              reps grind [lang]    endless reps, weakest first, until you press q
+              reps [lang]           one rep after another; q stops whenever you like
+              reps recall [id|lang] read it, hide it, write it; the tests decide (exact match if none)
+              reps blank [id|lang]  the spec and the tests only; write it, Ctrl+D runs the tests
+              reps trace [id|lang]  type over the reference, for syntax that is new to you
               reps interview [lang|id] [minutes]  one blank problem, 45 min default, one submission
-              reps list [lang] [tag] every snippet with its box, due date and last results
+              reps list [lang] [tag] every snippet with its box, next date and last results
               reps projects        real builds with steps: progress and hours
               reps project <id>    one project's goal, steps and time
               reps project new <id> <title>  a new project file under projects/
               reps work [id] [step] timed block on the next open step; Enter marks it done
-              reps due             how many are due today
               reps stats           streak, boxes, weekly blank first-try rate
               reps verify [id...]  check reference code passes its own tests
               reps new <id> <title> start a new snippet file (id starts with cs-, py-, c- or asm-)
@@ -521,8 +481,10 @@ public static class Program
             Languages: cs (C#, Roslyn in-process), py (python3), c (cc), asm (ARM64, assembled with cc
             and called from a C harness). lang can be given anywhere an id can.
 
-            Pass: trace ≥ 97% accuracy · recall exact after whitespace · blank all tests.
-            Pass moves a snippet up a box (due in 1, 2, 4, 8, 16 days); fail drops it to box 1.
+            Every snippet sits in a box. Box 1 (new, or missed last time) comes up in recall; boxes 2 to 5
+            come up in blank. A pass moves it up one box and it returns after 2, 4, 8 or 16 days; a miss
+            sends it back to box 1 for tomorrow. The session serves whatever is ready first, then the
+            weakest, so there is no list to clear. Trace is never scheduled; ask for it when you want it.
             The number that matters is the blank-mode first-try rate, week over week.
             Recall and blank use a built-in editor: Ctrl+D submits, Esc gives up, Tab indents.
             Set REPS_EDITOR (nano, vim, "code --wait") only if you really want an external one.
@@ -550,18 +512,16 @@ public static class Program
         return null;
     }
 
+    /// Box 1 (new, or missed last time) is recall: read it, then write it. Boxes 2 to 5 are
+    /// blank: the spec and the tests only. Snippets without tests stay in recall. Trace is
+    /// never scheduled; it is there for the asking.
     private static Mode ModeFor(int box, Snippet snippet)
     {
-        var wanted = box switch { 1 => Mode.Trace, 2 => Mode.Recall, _ => Mode.Blank };
-        if (snippet.Supports(wanted) && (wanted != Mode.Blank || Runner.Available(snippet.Language)))
+        if (box >= 2 && snippet.Supports(Mode.Blank) && Runner.Available(snippet.Language))
         {
-            return wanted;
+            return Mode.Blank;
         }
-        if (wanted == Mode.Blank && snippet.Supports(Mode.Recall))
-        {
-            return Mode.Recall;
-        }
-        return snippet.Supports(Mode.Trace) ? Mode.Trace : Mode.Recall;
+        return snippet.Supports(Mode.Recall) || !snippet.Supports(Mode.Trace) ? Mode.Recall : Mode.Trace;
     }
 
     private static async Task<AttemptResult> RunAsync(Mode mode, Snippet snippet, Workspace workspace, DateOnly today)
@@ -569,21 +529,32 @@ public static class Program
         var result = mode switch
         {
             Mode.Trace => TraceMode.Run(snippet),
-            Mode.Recall => RecallMode.Run(snippet),
+            Mode.Recall => await RecallMode.RunAsync(snippet),
             _ => await BlankMode.RunAsync(snippet),
         };
-        var firstTry = mode != Mode.Blank || (result.Tries == 1 && workspace.Store.BlankTriesToday(snippet.Id, today) == 0);
+        var firstTry = mode switch
+        {
+            Mode.Trace => true,
+            Mode.Recall => result.Tries == 1,
+            _ => result.Tries == 1 && workspace.Store.BlankTriesToday(snippet.Id, today) == 0,
+        };
         workspace.Store.RecordAttempt(new AttemptRow(snippet.Id, mode, DateTime.Now, result.Seconds, result.Accuracy, result.Passed, firstTry));
         return result;
     }
 
+    /// Recall and blank move the snippet between boxes; trace is a warm-up and moves nothing.
     private static void Report(AttemptResult result, Workspace workspace, Snippet snippet, DateOnly today)
     {
-        var before = workspace.Store.GetCard(snippet.Id)?.Box ?? 1;
-        var (box, due) = workspace.Store.Advance(snippet.Id, result.Passed, today);
         var verdict = result.Passed ? "[green bold]PASS[/]" : "[red bold]FAIL[/]";
+        if (result.Mode == Mode.Trace)
+        {
+            AnsiConsole.MarkupLine($"{verdict}  {Markup.Escape(result.Note)}");
+            return;
+        }
+        var (box, due) = workspace.Store.Advance(snippet.Id, result.Passed, today);
         var days = due.DayNumber - today.DayNumber;
-        AnsiConsole.MarkupLine($"{verdict}  {Markup.Escape(result.Note)}  ·  box {before} → {box}, back in {days} day{(days == 1 ? "" : "s")}");
+        var next = ModeFor(box, snippet).ToString().ToLowerInvariant();
+        AnsiConsole.MarkupLine($"{verdict}  {Markup.Escape(result.Note)}  ·  {next} next, in {days} day{(days == 1 ? "" : "s")}");
     }
 
     private static void Summary(Workspace workspace, DateOnly today)
@@ -594,8 +565,8 @@ public static class Program
         var cards = store.AllCards().Where(c => workspace.Find(c.Id) is not null).ToList();
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine($"[bold]today[/] {todayAttempts.Count} reps · {todayAttempts.Count(a => a.Passed)} passed · blank first-try {(rate is null ? "—" : rate.Value.ToString("P0"))}");
-        AnsiConsole.MarkupLine($"[bold]streak[/] {store.Streak(today)} days · [bold]due tomorrow[/] {cards.Count(c => c.NextDue <= today.AddDays(1) && c.NextDue > today)}");
-        var boxTable = new Table().Border(TableBorder.Simple).AddColumn("").AddColumn("due").AddColumn("box1").AddColumn("box2").AddColumn("box3").AddColumn("box4").AddColumn("box5");
+        AnsiConsole.MarkupLine($"[bold]streak[/] {store.Streak(today)} days");
+        var boxTable = new Table().Border(TableBorder.Simple).AddColumn("").AddColumn("box1 recall").AddColumn("box2 blank").AddColumn("box3").AddColumn("box4").AddColumn("box5");
         foreach (var language in Languages.All)
         {
             var mine = cards.Where(c => workspace.Find(c.Id)!.Language == language).ToList();
@@ -603,7 +574,7 @@ public static class Program
             {
                 continue;
             }
-            boxTable.AddRow([language.DisplayName(), mine.Count(c => c.NextDue <= today).ToString(), .. Enumerable.Range(1, Store.MaxBox).Select(b => mine.Count(c => c.Box == b).ToString())]);
+            boxTable.AddRow([language.DisplayName(), .. Enumerable.Range(1, Store.MaxBox).Select(b => mine.Count(c => c.Box == b).ToString())]);
         }
         AnsiConsole.Write(boxTable);
         var workToday = store.WorkSeconds(today, today);
@@ -698,16 +669,6 @@ public sealed class Workspace : IDisposable
 
     public Project RequireProject(string id) =>
         Projects.FirstOrDefault(p => p.Id == id) ?? throw new RepsException($"no project with id {id}. Try: reps projects");
-
-    public Snippet Random(Mode mode, Language? language = null)
-    {
-        var candidates = Snippets.Where(s => s.Supports(mode) && (language is null || s.Language == language)).ToList();
-        if (candidates.Count == 0)
-        {
-            throw new RepsException($"no {(language is null ? "" : language.Value.DisplayName() + " ")}snippets support {mode.ToString().ToLowerInvariant()} mode");
-        }
-        return candidates[System.Random.Shared.Next(candidates.Count)];
-    }
 
     public void Dispose() => Store.Dispose();
 }
