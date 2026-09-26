@@ -406,3 +406,30 @@ reps/
       Program.cs
   tests/
 ```
+
+## Added 26 September 2026
+
+### Languages
+
+Every snippet has a `lang`: `cs` (default), `py`, `c` or `asm`, inferable from the id
+prefix. Trace and recall are language-agnostic; recall normalises whitespace per language
+(token-aware for C and C#, indentation-preserving for Python, line-based with comments
+stripped for assembly). Blank mode runs a per-language runner: Roslyn in-process for C#;
+`python3` on a generated script (with a `raises(fn)` helper) for Python; `cc -std=c11` on
+a harness with a `_Generic` printer for C; the same harness plus the snippet's `decl`
+prototypes, linked with the `.s` file, for AArch64 assembly on macOS.
+
+### Projects and work blocks
+
+`projects/*.md`: front matter (id, title, status, stack), a goal paragraph, and a
+checklist of steps. `reps work <id>` times the next open step, ticks it in the file when
+done, and logs seconds to the `work` table. Hours and steps completed appear in
+`reps projects` and `reps stats`. The five ladder rungs from the coach prompt ship as the
+first projects.
+
+### Grind and interview
+
+`reps grind [lang]` is the unbounded session: due first, then lowest box, then least
+recently attempted, never the same snippet twice in eight reps. `reps interview [lang|id]
+[minutes]` is blank mode with a countdown (45 minutes by default) and a single submission;
+running out of time is a fail even if the code was right.

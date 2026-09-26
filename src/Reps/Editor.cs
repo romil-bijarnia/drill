@@ -14,9 +14,12 @@ public sealed class TextBox
     private int _col;
     private int _scroll;
 
-    public TextBox(IReadOnlyList<string> header, string initial = "")
+    private readonly Language _language;
+
+    public TextBox(IReadOnlyList<string> header, string initial = "", Language language = Language.CSharp)
     {
         _header = header;
+        _language = language;
         if (initial.Length > 0)
         {
             _lines = initial.Replace("\r\n", "\n").Split('\n').Select(l => new StringBuilder(l)).ToList();
@@ -27,8 +30,12 @@ public sealed class TextBox
 
     public string Text => string.Join("\n", _lines.Select(l => l.ToString()));
 
-    /// Returns the text on Ctrl+D, or null if the user gave up with Esc.
-    public string? Run()
+    /// Set when a deadline passed before Ctrl+D; the text at that moment is still returned.
+    public bool TimedOut { get; private set; }
+
+    /// Returns the text on Ctrl+D (or when the deadline passes), or null if the user gave
+    /// up with Esc.
+    public string? Run(DateTime? deadline = null)
     {
         Console.Clear();
         Console.CursorVisible = true;
@@ -36,12 +43,25 @@ public sealed class TextBox
         {
             while (true)
             {
-                Draw(null);
+                Draw(null, deadline);
+                if (deadline is not null)
+                {
+                    while (!Console.KeyAvailable)
+                    {
+                        if (DateTime.UtcNow >= deadline.Value)
+                        {
+                            TimedOut = true;
+                            return Text;
+                        }
+                        Thread.Sleep(100);
+                        Draw(null, deadline);
+                    }
+                }
                 var key = Console.ReadKey(intercept: true);
                 var control = key.Modifiers.HasFlag(ConsoleModifiers.Control);
                 if (key.Key == ConsoleKey.Escape)
                 {
-                    Draw("give up on this rep? y / n");
+                    Draw("give up on this rep? y / n", deadline);
                     var answer = Console.ReadKey(intercept: true);
                     if (answer.KeyChar is 'y' or 'Y')
                     {
@@ -91,7 +111,8 @@ public sealed class TextBox
             case ConsoleKey.Enter:
                 {
                     var indent = Indentation(line.ToString());
-                    if (line.ToString().TrimEnd().EndsWith('{'))
+                    var trimmed = line.ToString().TrimEnd();
+                    if (_language == Language.Python ? trimmed.EndsWith(':') : trimmed.EndsWith('{'))
                     {
                         indent += 4;
                     }
@@ -157,7 +178,7 @@ public sealed class TextBox
         {
             return;
         }
-        if (c == '}' && line.ToString().Trim().Length == 0)
+        if (c == '}' && _language != Language.Python && line.ToString().Trim().Length == 0)
         {
             Dedent(line); // a closing brace on its own line steps back out
         }
@@ -183,7 +204,7 @@ public sealed class TextBox
         return count;
     }
 
-    private void Draw(string? prompt)
+    private void Draw(string? prompt, DateTime? deadline = null)
     {
         var width = Math.Max(40, SafeWidth());
         var height = Math.Max(12, SafeHeight());
@@ -208,7 +229,8 @@ public sealed class TextBox
             }
             output.Append(Ansi.ClearLine).Append('\n');
         }
-        var status = prompt ?? $"Ctrl+D done · Esc give up · Tab indents · ln {_row + 1}, col {_col + 1}";
+        var remaining = deadline is null ? "" : $"{(deadline.Value - DateTime.UtcNow):mm\\:ss} left · ";
+        var status = prompt ?? $"{remaining}Ctrl+D done · Esc give up · Tab indents · ln {_row + 1}, col {_col + 1}";
         output.Append(prompt is null ? Ansi.Dim : "\e[33m").Append(Fit(status, width - 1)).Append(Ansi.Reset).Append(Ansi.ClearLine);
         output.Append("\e[J");
         var cursorRow = editorTop + (_row - _scroll) + 1;

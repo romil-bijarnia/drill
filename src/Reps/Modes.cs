@@ -233,21 +233,21 @@ public static class RecallMode
         }
 
         var clock = Stopwatch.StartNew();
-        var text = Ui.Compose(snippet, "recall", ["Type it from memory."], "");
+        var (text, _) = Ui.Compose(snippet, "recall", ["Type it from memory."], "");
         clock.Stop();
         if (text is null)
         {
             return new AttemptResult(Mode.Recall, false, clock.Elapsed.TotalSeconds, null, 1, true, "abandoned");
         }
 
-        var distance = TextDiff.Levenshtein(TextDiff.Normalize(text), TextDiff.Normalize(snippet.Code));
+        var distance = TextDiff.Levenshtein(TextDiff.Normalize(text, snippet.Language), TextDiff.Normalize(snippet.Code, snippet.Language));
         var passed = distance == 0 && text.Trim().Length > 0;
         Console.Clear();
         Ui.Heading(snippet, "recall");
         if (!passed)
         {
             var table = new Table().Border(TableBorder.Rounded).AddColumn("reference").AddColumn("yours");
-            foreach (var (expected, actual, same) in TextDiff.LineReport(snippet.Code, text))
+            foreach (var (expected, actual, same) in TextDiff.LineReport(snippet.Code, text, snippet.Language))
             {
                 var colour = same ? "green" : "red";
                 table.AddRow($"[{colour}]{Markup.Escape(expected)}[/]", $"[{colour}]{Markup.Escape(actual)}[/]");
@@ -264,22 +264,42 @@ public static class RecallMode
 /// weekly number.
 public static class BlankMode
 {
-    public static async Task<AttemptResult> RunAsync(Snippet snippet)
+    public static async Task<AttemptResult> RunAsync(Snippet snippet, TimeSpan? timeLimit = null)
     {
-        var header = new List<string> { snippet.Spec, "tests:" };
+        var deadline = timeLimit is null ? (DateTime?)null : DateTime.UtcNow + timeLimit.Value;
+        var header = new List<string> { snippet.Spec };
+        if (timeLimit is not null)
+        {
+            header.Add($"interview mode: {timeLimit.Value.TotalMinutes:0} minutes, no hints, one submission");
+        }
+        if (snippet.Decl.Length > 0)
+        {
+            header.Add($"signature: {snippet.Decl}");
+        }
+        header.Add("tests:");
         header.AddRange(snippet.Tests.Select(t => $"  {t.Call}  =>  {t.Expect}"));
         var text = "";
         var tries = 0;
         var clock = Stopwatch.StartNew();
         while (true)
         {
-            var edited = Ui.Compose(snippet, "blank", header, text);
+            var (edited, timedOut) = Ui.Compose(snippet, timeLimit is null ? "blank" : "interview", header, text, deadline);
             if (edited is null)
             {
                 clock.Stop();
                 return new AttemptResult(Mode.Blank, false, clock.Elapsed.TotalSeconds, null, Math.Max(1, tries), true, "abandoned");
             }
             text = edited;
+            if (timedOut)
+            {
+                clock.Stop();
+                var late = await Runner.EvaluateAsync(snippet, text, TimeSpan.FromSeconds(10));
+                Console.Clear();
+                Ui.Heading(snippet, "interview");
+                ShowResult(late);
+                return new AttemptResult(Mode.Blank, false, clock.Elapsed.TotalSeconds, null, Math.Max(1, tries + 1), false,
+                    late.AllPassed ? "correct, but over time" : "time is up");
+            }
             if (text.Trim().Length == 0)
             {
                 clock.Stop();
@@ -291,13 +311,18 @@ public static class BlankMode
             Ui.Heading(snippet, "blank");
             var result = await AnsiConsole.Status().StartAsync(
                 "compiling and running the tests…",
-                _ => Evaluator.RunAsync(text, snippet.Tests, TimeSpan.FromSeconds(10)));
+                _ => Runner.EvaluateAsync(snippet, text, TimeSpan.FromSeconds(10)));
             ShowResult(result);
             if (result.AllPassed)
             {
                 clock.Stop();
                 var note = tries == 1 ? $"all tests · first try · {clock.Elapsed.TotalSeconds:0}s" : $"all tests · try {tries} · {clock.Elapsed.TotalSeconds:0}s";
                 return new AttemptResult(Mode.Blank, true, clock.Elapsed.TotalSeconds, null, tries, false, note);
+            }
+            if (timeLimit is not null)
+            {
+                clock.Stop();
+                return new AttemptResult(Mode.Blank, false, clock.Elapsed.TotalSeconds, null, tries, false, "interview: one submission, tests failed");
             }
             AnsiConsole.MarkupLine("[grey]Enter to keep editing · q to stop here[/]");
             var key = Console.ReadKey(intercept: true);
@@ -335,26 +360,30 @@ internal static class Ui
     public static void Heading(Snippet snippet, string mode)
     {
         var tags = snippet.Tags.Count > 0 ? $"  [grey]{Markup.Escape(string.Join(", ", snippet.Tags))}[/]" : "";
-        AnsiConsole.MarkupLine($"[bold cyan]{Markup.Escape(snippet.Id)}[/] [bold]{Markup.Escape(snippet.Title)}[/]{tags}  [grey]·[/] [yellow]{mode}[/]");
+        AnsiConsole.MarkupLine($"[bold cyan]{Markup.Escape(snippet.Id)}[/] [bold]{Markup.Escape(snippet.Title)}[/]  [grey]{snippet.Language.DisplayName()}[/]{tags}  [grey]·[/] [yellow]{mode}[/]");
     }
 
     /// Opens the built-in editor (or REPS_EDITOR when set) under a plain-text header.
-    public static string? Compose(Snippet snippet, string mode, IReadOnlyList<string> lines, string initial)
+    public static (string? Text, bool TimedOut) Compose(Snippet snippet, string mode, IReadOnlyList<string> lines, string initial, DateTime? deadline = null)
     {
         if (ExternalEditor.Command is not null)
         {
-            var comment = string.Join("\n", lines.Select(l => "// " + l)) + "\n\n";
-            var edited = ExternalEditor.Edit(comment + initial, ".cs", lines.Count + 2);
+            var prefix = snippet.Language == Language.Python ? "# " : "// ";
+            var comment = string.Join("\n", lines.Select(l => prefix + l)) + "\n\n";
+            var edited = ExternalEditor.Edit(comment + initial, snippet.Language.Extension(), lines.Count + 2);
             if (edited is null)
             {
-                return null;
+                return (null, false);
             }
             edited = edited.Replace("\r\n", "\n");
-            return edited.StartsWith(comment, StringComparison.Ordinal) ? edited[comment.Length..] : edited;
+            var body = edited.StartsWith(comment, StringComparison.Ordinal) ? edited[comment.Length..] : edited;
+            return (body, deadline is not null && DateTime.UtcNow > deadline.Value);
         }
-        var header = new List<string> { $"{snippet.Id} {snippet.Title} · {mode}" };
+        var header = new List<string> { $"{snippet.Id} {snippet.Title} · {snippet.Language.DisplayName()} · {mode}" };
         header.AddRange(lines);
-        return new TextBox(header, initial).Run();
+        var box = new TextBox(header, initial, snippet.Language);
+        var text = box.Run(deadline);
+        return (text, box.TimedOut);
     }
 
     /// The terminal's current row, without trusting Console.CursorTop on odd terminals.

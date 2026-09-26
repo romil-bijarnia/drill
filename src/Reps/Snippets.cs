@@ -2,19 +2,71 @@ namespace Reps;
 
 public enum Mode { Trace, Recall, Blank }
 
+public enum Language { CSharp, Python, C, Asm }
+
+public static class Languages
+{
+    public static readonly Language[] All = [Language.CSharp, Language.Python, Language.C, Language.Asm];
+
+    public static string Key(this Language language) => language switch
+    {
+        Language.CSharp => "cs",
+        Language.Python => "py",
+        Language.C => "c",
+        Language.Asm => "asm",
+        _ => "cs",
+    };
+
+    public static string DisplayName(this Language language) => language switch
+    {
+        Language.CSharp => "C#",
+        Language.Python => "Python",
+        Language.C => "C",
+        Language.Asm => "ARM64 asm",
+        _ => "C#",
+    };
+
+    public static string Extension(this Language language) => language switch
+    {
+        Language.Python => ".py",
+        Language.C => ".c",
+        Language.Asm => ".s",
+        _ => ".cs",
+    };
+
+    public static bool TryParse(string? text, out Language language)
+    {
+        switch (text?.Trim().ToLowerInvariant())
+        {
+            case "cs" or "csharp" or "c#":
+                language = Language.CSharp; return true;
+            case "py" or "python":
+                language = Language.Python; return true;
+            case "c":
+                language = Language.C; return true;
+            case "asm" or "assembly" or "arm64" or "aarch64":
+                language = Language.Asm; return true;
+            default:
+                language = Language.CSharp; return false;
+        }
+    }
+}
+
 public sealed record SnippetTest(string Call, string Expect);
 
 public sealed record Snippet(
     string Id,
     string Title,
+    Language Language,
     IReadOnlyList<string> Tags,
     IReadOnlyList<string> Modes,
     string Spec,
+    string Decl,
     IReadOnlyList<SnippetTest> Tests,
     string Code,
     string Path)
 {
-    public bool Supports(Mode mode) => Modes.Contains(mode.ToString().ToLowerInvariant());
+    public bool Supports(Mode mode) => Modes.Contains(mode.ToString().ToLowerInvariant()) && (mode != Mode.Blank || Tests.Count > 0);
 
     public string FileName => System.IO.Path.GetFileName(Path);
 }
@@ -43,8 +95,7 @@ public static class SnippetLoader
                 problems.Add($"bad snippet: {System.IO.Path.GetFileName(file)} ({error.Message})");
             }
         }
-        var duplicates = snippets.GroupBy(s => s.Id).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
-        foreach (var id in duplicates)
+        foreach (var id in snippets.GroupBy(s => s.Id).Where(g => g.Count() > 1).Select(g => g.Key))
         {
             problems.Add($"duplicate id {id}");
         }
@@ -65,7 +116,7 @@ public static class SnippetLoader
             throw new FormatException("missing closing ---");
         }
 
-        string? id = null, title = null, spec = null;
+        string? id = null, title = null, spec = null, decl = null, lang = null;
         var tags = new List<string>();
         var modes = new List<string>();
         var tests = new List<SnippetTest>();
@@ -113,6 +164,8 @@ public static class SnippetLoader
                     case "id": id = Unquote(value); break;
                     case "title": title = Unquote(value); break;
                     case "spec": spec = Unquote(value); break;
+                    case "decl": decl = Unquote(value); break;
+                    case "lang": lang = Unquote(value); break;
                     case "tags": tags = ParseList(value); break;
                     case "modes": modes = ParseList(value); break;
                     default: break; // unknown keys are ignored so the format can grow
@@ -131,6 +184,19 @@ public static class SnippetLoader
         {
             throw new FormatException("missing title");
         }
+        var language = Language.CSharp;
+        if (lang is not null && !Languages.TryParse(lang, out language))
+        {
+            throw new FormatException($"unknown lang '{lang}' (use cs, py, c or asm)");
+        }
+        if (lang is null)
+        {
+            var prefix = id!.Split('-')[0];
+            if (Languages.TryParse(prefix, out var inferred))
+            {
+                language = inferred;
+            }
+        }
         if (modes.Count == 0)
         {
             modes = ["trace", "recall", "blank"];
@@ -140,7 +206,7 @@ public static class SnippetLoader
         {
             throw new FormatException("no reference code");
         }
-        return new Snippet(id!, title!, tags, modes, spec ?? "", tests, code, path);
+        return new Snippet(id!, title!, language, tags, modes, spec ?? "", decl ?? "", tests, code, path);
     }
 
     private static List<string> ParseList(string value)
@@ -166,19 +232,29 @@ public static class SnippetLoader
         return value;
     }
 
-    public static string Template(string id, string title) =>
-        $"""
-        ---
-        id: {id}
-        title: {title}
-        tags: [todo]
-        modes: [trace, recall, blank]
-        spec: One line describing what to write.
-        tests:
-          - call: 'Example(1)'
-            expect: '1'
-        ---
-        public static int Example(int x) => x;
+    public static string Template(string id, string title, Language language)
+    {
+        var (example, call, decl) = language switch
+        {
+            Language.Python => ("def example(x):\n    return x", "example(1)", ""),
+            Language.C => ("int example(int x)\n{\n    return x;\n}", "example(1)", ""),
+            Language.Asm => (".text\n.globl _example\n.p2align 2\n_example:\n    ret", "example(1)", "decl: 'long example(long);'\n"),
+            _ => ("public static int Example(int x) => x;", "Example(1)", ""),
+        };
+        return $"""
+            ---
+            id: {id}
+            title: {title}
+            lang: {language.Key()}
+            tags: [todo]
+            modes: [trace, recall, blank]
+            spec: One line describing what to write.
+            {decl}tests:
+              - call: '{call}'
+                expect: '1'
+            ---
+            {example}
 
-        """;
+            """;
+    }
 }

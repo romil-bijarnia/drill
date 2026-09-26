@@ -52,6 +52,14 @@ public sealed class Store : IDisposable
                 attempts              INTEGER NOT NULL,
                 blank_first_try_rate  REAL
             );
+            CREATE TABLE IF NOT EXISTS work (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id TEXT NOT NULL,
+                step       INTEGER NOT NULL,
+                started_at TEXT NOT NULL,
+                seconds    REAL NOT NULL,
+                completed  INTEGER NOT NULL
+            );
             """);
     }
 
@@ -219,6 +227,37 @@ public sealed class Store : IDisposable
         return stats;
     }
 
+    public void LogWork(string projectId, int step, DateTime startedAt, double seconds, bool completed)
+    {
+        Execute(
+            "INSERT INTO work (project_id, step, started_at, seconds, completed) VALUES ($id, $step, $started, $seconds, $done)",
+            ("$id", projectId), ("$step", step), ("$started", startedAt.ToString("o")), ("$seconds", seconds), ("$done", completed ? 1 : 0));
+    }
+
+    /// Seconds of project work between two days inclusive, optionally for one project.
+    public double WorkSeconds(DateOnly from, DateOnly to, string? projectId = null)
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = "SELECT COALESCE(SUM(seconds), 0) FROM work WHERE substr(started_at, 1, 10) BETWEEN $from AND $to"
+            + (projectId is null ? "" : " AND project_id = $id");
+        command.Parameters.AddWithValue("$from", from.ToString("yyyy-MM-dd"));
+        command.Parameters.AddWithValue("$to", to.ToString("yyyy-MM-dd"));
+        if (projectId is not null)
+        {
+            command.Parameters.AddWithValue("$id", projectId);
+        }
+        return Convert.ToDouble(command.ExecuteScalar());
+    }
+
+    public int StepsCompleted(DateOnly from, DateOnly to)
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM work WHERE completed = 1 AND substr(started_at, 1, 10) BETWEEN $from AND $to";
+        command.Parameters.AddWithValue("$from", from.ToString("yyyy-MM-dd"));
+        command.Parameters.AddWithValue("$to", to.ToString("yyyy-MM-dd"));
+        return Convert.ToInt32(command.ExecuteScalar());
+    }
+
     public int SessionDays()
     {
         using var command = _connection.CreateCommand();
@@ -231,7 +270,7 @@ public sealed class Store : IDisposable
         var days = new HashSet<DateOnly>();
         using (var command = _connection.CreateCommand())
         {
-            command.CommandText = "SELECT DISTINCT substr(started_at, 1, 10) FROM attempts";
+            command.CommandText = "SELECT DISTINCT substr(started_at, 1, 10) FROM attempts UNION SELECT DISTINCT substr(started_at, 1, 10) FROM work";
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {

@@ -1,0 +1,15 @@
+---
+id: cs-015
+title: Greatest common divisor
+tags: [algorithms, recursion]
+modes: [trace, recall, blank]
+spec: Greatest common divisor of two non-negative integers, recursively.
+tests:
+  - call: 'Gcd(12, 18)'
+    expect: '6'
+  - call: 'Gcd(7, 3)'
+    expect: '1'
+  - call: 'Gcd(0, 5)'
+    expect: '5'
+---
+public static int Gcd(int a, int b) => b == 0 ? a : Gcd(b, a % b);

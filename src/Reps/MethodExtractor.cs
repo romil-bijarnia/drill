@@ -10,9 +10,20 @@ public static partial class MethodExtractor
     [GeneratedRegex(@"^(?<indent>[ \t]*)(?:(?:public|private|internal|protected)\s+)*static\s+(?:async\s+)?[\w<>\[\],\.\?\s]+?\s+(?<name>\w+)\s*(?:<[^>()]*>)?\s*\([^;{}]*\)\s*(?:where[^{;=]*)?(?<open>\{|=>)", RegexOptions.Multiline)]
     private static partial Regex Signature();
 
-    public static IEnumerable<(string Name, string Code)> Extract(string source)
+    [GeneratedRegex(@"^def\s+(?<name>\w+)\s*\(", RegexOptions.Multiline)]
+    private static partial Regex PythonDef();
+
+    public static IEnumerable<(string Name, string Code)> Extract(string source, Language language = Language.CSharp)
     {
         var text = source.Replace("\r\n", "\n");
+        if (language == Language.Python)
+        {
+            foreach (var function in ExtractPython(text))
+            {
+                yield return function;
+            }
+            yield break;
+        }
         foreach (Match match in Signature().Matches(text))
         {
             var start = match.Index;
@@ -36,6 +47,40 @@ public static partial class MethodExtractor
                 continue;
             }
             yield return (match.Groups["name"].Value, Dedent(lines));
+        }
+    }
+
+    /// Top-level `def` blocks: from the def line to the last line indented deeper than it.
+    private static IEnumerable<(string Name, string Code)> ExtractPython(string text)
+    {
+        var lines = text.Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var match = PythonDef().Match(lines[i]);
+            if (!match.Success)
+            {
+                continue;
+            }
+            var end = i;
+            for (var j = i + 1; j < lines.Length; j++)
+            {
+                var line = lines[j];
+                if (line.Trim().Length == 0)
+                {
+                    continue;
+                }
+                if (line.Length - line.TrimStart().Length == 0)
+                {
+                    break;
+                }
+                end = j;
+            }
+            var block = lines[i..(end + 1)];
+            if (block.Length <= 40)
+            {
+                yield return (match.Groups["name"].Value, string.Join("\n", block).TrimEnd());
+            }
+            i = end;
         }
     }
 
