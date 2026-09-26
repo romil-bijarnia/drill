@@ -40,6 +40,8 @@ ARM64 assembly. Projects under `projects/` are the things I am building for real
 
 ## Daily
 
+The phases, milestones and dates are in `PLAN.md`; point at the current phase, not the whole plan.
+
 Two blocks a day, every day. Block one: one hour of `drill`, whatever it serves, until the
 clock runs out, no count. Block two: one hour on the active project, one step, in my own
 editor with nothing else open. Stuck on a step: twenty minutes alone first, then one hint

@@ -5,6 +5,8 @@ assembly. One rep after another for as long as you want, the same problem taken 
 Python down to assembly, quick-fire bits and bytes, real projects with timed work blocks,
 and one number that matters.
 
+The order of everything, with dates, is in [PLAN.md](PLAN.md).
+
 ## Snippets: four ways to practise each one
 
 | Mode    | What you see                             | What you do                                       | Pass                                              |
