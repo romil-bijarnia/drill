@@ -1,4 +1,4 @@
-# Codetype
+# Etude
 
 A local trainer that moves me from copying C# to producing it. Every session
 is a short set of reps. The tool measures one thing: can I write correct code
@@ -60,7 +60,7 @@ repos so I am rehearsing code I actually write.
 
 ## Data
 
-SQLite, one file `codetype.db`, three tables.
+SQLite, one file `etude.db`, three tables.
 
 ```sql
 CREATE TABLE snippets (
@@ -391,7 +391,7 @@ public static int Search(int[] xs, int target)
 ## Repo layout
 
 ```
-codetype/
+etude/
   CLAUDE.md
   SPEC.md
   PROGRESS.md
@@ -399,8 +399,8 @@ codetype/
     001-linq-pipeline.md
     ...
   src/
-    Codetype/
-      Codetype.csproj
+    Etude/
+      Etude.csproj
       Program.cs
   tests/
 ```
