@@ -3,4 +3,4 @@ obj/
 *.user
 .vs/
 .idea/
-codetype.db
+etude.db
