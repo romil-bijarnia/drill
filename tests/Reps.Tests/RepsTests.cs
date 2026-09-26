@@ -1,6 +1,8 @@
 using Reps;
 using Xunit;
 
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
+
 public class SnippetParserTests
 {
     private const string Sample = """

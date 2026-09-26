@@ -19,6 +19,10 @@ public static class Evaluator
 {
     private static readonly Lazy<ScriptOptions> Options = new(BuildOptions);
 
+    // Roslyn scripting's first-time initialisation is not safe to race; the trainer never
+    // evaluates concurrently, but the test suite does, so serialise to be certain.
+    private static readonly SemaphoreSlim Gate = new(1, 1);
+
     private static ScriptOptions BuildOptions()
     {
         var references = new List<Assembly>
@@ -49,6 +53,19 @@ public static class Evaluator
     }
 
     public static async Task<EvalResult> RunAsync(string code, IReadOnlyList<SnippetTest> tests, TimeSpan timeout)
+    {
+        await Gate.WaitAsync();
+        try
+        {
+            return await RunUnlockedAsync(code, tests, timeout);
+        }
+        finally
+        {
+            Gate.Release();
+        }
+    }
+
+    private static async Task<EvalResult> RunUnlockedAsync(string code, IReadOnlyList<SnippetTest> tests, TimeSpan timeout)
     {
         var script = CSharpScript.Create(code, Options.Value);
         var errors = script.Compile()
