@@ -24,9 +24,11 @@ Leitner boxes. Each snippet sits in box 1 to 5.
 
 - Pass: box + 1 (max 5). Fail: box = 1.
 - A snippet in box n is due every 2^(n-1) days: 1, 2, 4, 8, 16.
-- A daily session is "everything due today," capped at 15 snippets.
-- Trace passes at 97% accuracy or better. Recall passes at edit distance 0
-  after whitespace normalisation. Blank passes when all tests pass.
+- A daily session is "everything due today"; q stops it at any point (the cap of 15
+  from the first draft was dropped on 26 Sep: the session is not a gym set).
+- Trace passes at 97% accuracy or better; spacing is not graded (spaces between
+  tokens fill in, stray spaces are ignored, Enter still ends a line). Recall passes
+  at edit distance 0 after whitespace normalisation. Blank passes when all tests pass.
 
 ## Snippet bank
 

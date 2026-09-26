@@ -26,6 +26,8 @@ internal static class Ansi
 /// Trace: the reference sits on screen in dim grey and you type over it. Each key turns
 /// its character green or red; Backspace takes it back; Enter steps to the next line and
 /// the indentation is filled in for you; Tab is four spaces; Esc abandons (a fail).
+/// Spacing is not graded: spaces between tokens fill in when the next character arrives
+/// and stray spaces are ignored, so `a=0` and `a = 0` both pass.
 public static class TraceMode
 {
     public const double PassAccuracy = 0.97;
@@ -123,6 +125,26 @@ public static class TraceMode
                 if (c == '\0' || (char.IsControl(c) && c != '\n'))
                 {
                     continue;
+                }
+                if (c == ' ' && target[position] != ' ')
+                {
+                    continue; // a space where the reference has none is style, not an error
+                }
+                if (c != ' ' && target[position] == ' ')
+                {
+                    // Spaces between tokens are filled in for you; the next real character
+                    // is what gets graded.
+                    while (position < target.Length && target[position] == ' ')
+                    {
+                        typed[position] = ' ';
+                        auto[position] = true;
+                        position++;
+                    }
+                    if (position >= target.Length)
+                    {
+                        Render(target, typed, position, top, width);
+                        continue;
+                    }
                 }
                 keystrokes++;
                 typed[position] = c;

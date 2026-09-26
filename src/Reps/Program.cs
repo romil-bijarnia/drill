@@ -55,7 +55,6 @@ public static class Program
         var due = workspace.Store.Due(today)
             .Select(card => (card, snippet: workspace.Find(card.Id)))
             .Where(pair => pair.snippet is not null && (language is null || pair.snippet.Language == language))
-            .Take(15)
             .ToList();
         if (due.Count == 0)
         {
@@ -501,7 +500,7 @@ public static class Program
         AnsiConsole.WriteLine("""
             reps — a gym for writing code from a blank file: C#, Python, C, ARM64 asm
 
-              reps [lang]          today's session: everything due, capped at 15
+              reps [lang]          today's session: everything due, q stops whenever you like
               reps trace [id|lang] type over the reference (box 1 work)
               reps recall [id|lang] see it, then type it from memory (box 2)
               reps blank [id|lang] spec and tests only; write it, tests run (box 3+)

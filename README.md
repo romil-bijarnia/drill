@@ -14,8 +14,13 @@ number that matters.
 
 Each snippet sits in a Leitner box from 1 to 5. Box 1 is practised in trace, box 2 in
 recall, boxes 3 to 5 in blank. A pass moves it up a box and it comes back in 1, 2, 4, 8
-or 16 days; a fail drops it to box 1. `reps` runs everything due today, at most fifteen.
-The scoreboard is the blank-mode first-try pass rate, week over week.
+or 16 days; a fail drops it to box 1. `reps` runs everything due today; q stops whenever
+you like, and `reps grind` keeps going after that. The scoreboard is the blank-mode
+first-try pass rate, week over week.
+
+Trace grades code, not spacing: indentation and the spaces between tokens fill in as you
+type the next character, stray spaces are ignored, and only Enter is required to end a
+line. A wrong character shows red until you Backspace over it.
 
 Recall and blank use a small built-in editor with nothing in it to help you: Ctrl+D
 submits, Esc gives up, Tab indents, Enter keeps the indentation (after `{`, or `:` in
@@ -25,7 +30,7 @@ external editor; leave autocomplete off.
 ## Commands
 
 ```
-reps [lang]                 today's session
+reps [lang]                 today's session, everything due
 reps grind [lang]           endless reps, weakest first, until you press q
 reps interview [lang|id] [minutes]   one blank problem, 45 min by default, one submission
 reps trace | recall | blank [id|lang] one rep in a chosen mode (random if no id)
