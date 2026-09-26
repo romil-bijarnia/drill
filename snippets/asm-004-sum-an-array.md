@@ -3,6 +3,7 @@ id: asm-004
 title: Sum an array
 lang: asm
 tags: [loops, memory]
+family: sum
 modes: [trace, recall, blank]
 spec: long sum_array(const long *xs, long n): loop with a post-indexed ldr. AArch64 macOS ABI: arguments in x0, x1, x2..., result in x0; labels need a leading underscore.
 decl: 'long sum_array(const long *, long);'

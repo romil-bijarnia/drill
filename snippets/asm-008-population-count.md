@@ -3,6 +3,7 @@ id: asm-008
 title: Population count
 lang: asm
 tags: [bits, loops]
+family: popcount
 modes: [trace, recall, blank]
 spec: long popcount(long n): count set bits with and, lsr and a loop. AArch64 macOS ABI: arguments in x0, x1, x2..., result in x0; labels need a leading underscore.
 decl: 'long popcount(long);'

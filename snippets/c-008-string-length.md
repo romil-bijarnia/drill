@@ -3,6 +3,7 @@ id: c-008
 title: String length
 lang: c
 tags: [strings, pointers]
+family: strlen
 modes: [trace, recall, blank]
 spec: size_t my_strlen(const char *s) without calling strlen.
 tests:

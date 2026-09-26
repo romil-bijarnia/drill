@@ -3,6 +3,7 @@ id: c-013
 title: Binary search
 lang: c
 tags: [algorithms]
+family: bsearch
 modes: [trace, recall, blank]
 spec: int bsearch_index(const int *xs, int n, int target) returns the index or -1.
 tests:

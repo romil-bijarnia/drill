@@ -2,6 +2,7 @@
 id: cs-010
 title: Binary search
 tags: [algorithms, search]
+family: bsearch
 modes: [trace, recall, blank]
 spec: Return the index of target in a sorted array, or -1 if absent.
 tests:

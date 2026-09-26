@@ -3,6 +3,7 @@ id: asm-007
 title: Fibonacci
 lang: asm
 tags: [loops]
+family: fib
 modes: [trace, recall, blank]
 spec: long fib(long n) iteratively (F0 = 0, F1 = 1). AArch64 macOS ABI: arguments in x0, x1, x2..., result in x0; labels need a leading underscore.
 decl: 'long fib(long);'

@@ -3,6 +3,7 @@ id: c-005
 title: Fibonacci
 lang: c
 tags: [loops]
+family: fib
 modes: [trace, recall, blank]
 spec: long fib(int n) returns the nth Fibonacci number (F0 = 0, F1 = 1) iteratively.
 tests:

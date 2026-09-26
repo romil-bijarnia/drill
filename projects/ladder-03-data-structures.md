@@ -1,7 +1,7 @@
 ---
 id: ladder-03-data-structures
 title: Ladder 3 — data structures from scratch
-status: active
+status: later
 stack: [csharp]
 ---
 Rung three: build the containers you normally import, each generic, each with tests,

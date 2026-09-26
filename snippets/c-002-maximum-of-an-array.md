@@ -3,6 +3,7 @@ id: c-002
 title: Maximum of an array
 lang: c
 tags: [arrays]
+family: max
 modes: [trace, recall, blank]
 spec: int max_of(const int *xs, int n) returns the largest of n values (n >= 1).
 tests:

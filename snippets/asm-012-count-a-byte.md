@@ -3,6 +3,7 @@ id: asm-012
 title: Count a byte
 lang: asm
 tags: [loops, memory]
+family: count_char
 modes: [trace, recall, blank]
 spec: long count_byte(const char *s, long c): occurrences of the byte c in a zero-terminated string. AArch64 macOS ABI: arguments in x0, x1, x2..., result in x0; labels need a leading underscore.
 decl: 'long count_byte(const char *, long);'

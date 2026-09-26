@@ -3,6 +3,7 @@ id: asm-005
 title: String length
 lang: asm
 tags: [loops, memory]
+family: strlen
 modes: [trace, recall, blank]
 spec: long str_len(const char *s): count bytes until the zero terminator with ldrb. AArch64 macOS ABI: arguments in x0, x1, x2..., result in x0; labels need a leading underscore.
 decl: 'long str_len(const char *);'

@@ -3,6 +3,6 @@ obj/
 *.user
 .vs/
 .idea/
-reps.db
-reps.db-journal
+drill.db
+drill.db-journal
 .DS_Store

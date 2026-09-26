@@ -3,6 +3,7 @@ id: c-023
 title: Population count
 lang: c
 tags: [bits]
+family: popcount
 modes: [trace, recall, blank]
 spec: int popcount(unsigned n) counts set bits with a loop.
 tests:

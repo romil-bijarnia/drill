@@ -3,6 +3,7 @@ id: c-010
 title: Count a character
 lang: c
 tags: [strings]
+family: count_char
 modes: [trace, recall, blank]
 spec: int count_char(const char *s, char c) counts occurrences of c.
 tests:

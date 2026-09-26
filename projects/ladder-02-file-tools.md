@@ -1,7 +1,7 @@
 ---
 id: ladder-02-file-tools
 title: Ladder 2 — file tools
-status: active
+status: later
 stack: [csharp]
 ---
 Rung two: three small command-line tools that read real files. Word count, a CSV

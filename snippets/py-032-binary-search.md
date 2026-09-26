@@ -3,6 +3,7 @@ id: py-032
 title: Binary search
 lang: py
 tags: [algorithms]
+family: bsearch
 modes: [trace, recall, blank]
 spec: Index of target in a sorted list, or -1, using binary search.
 tests:

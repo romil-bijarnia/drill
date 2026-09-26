@@ -1,9 +1,9 @@
-# Reps — design
+# Drill — design
 
 Status: built (26 Sep 2026). This file is the design the trainer follows; README.md is how to use it.
 
 A local trainer that moves me from copying C# to producing it. Every session
-is a short set of reps. The tool measures one thing: can I write correct code
+is a short set of drill. The tool measures one thing: can I write correct code
 with nothing in front of me.
 
 ## Modes
@@ -64,7 +64,7 @@ repos so I am rehearsing code I actually write.
 
 ## Data
 
-SQLite, one file `reps.db`, three tables.
+SQLite, one file `drill.db`, three tables.
 
 ```sql
 CREATE TABLE snippets (
@@ -395,7 +395,7 @@ public static int Search(int[] xs, int target)
 ## Repo layout
 
 ```
-reps/
+drill/
   CLAUDE.md
   SPEC.md
   PROGRESS.md
@@ -403,8 +403,8 @@ reps/
     001-linq-pipeline.md
     ...
   src/
-    Reps/
-      Reps.csproj
+    Drill/
+      Drill.csproj
       Program.cs
   tests/
 ```
@@ -424,14 +424,14 @@ prototypes, linked with the `.s` file, for AArch64 assembly on macOS.
 ### Projects and work blocks
 
 `projects/*.md`: front matter (id, title, status, stack), a goal paragraph, and a
-checklist of steps. `reps work <id>` times the next open step, ticks it in the file when
+checklist of steps. `drill work <id>` times the next open step, ticks it in the file when
 done, and logs seconds to the `work` table. Hours and steps completed appear in
-`reps projects` and `reps stats`. The five ladder rungs from the coach prompt ship as the
+`drill projects` and `drill stats`. The five ladder rungs from the coach prompt ship as the
 first projects.
 
 ### Grind and interview
 
-`reps grind [lang]` is the unbounded session: due first, then lowest box, then least
-recently attempted, never the same snippet twice in eight reps. `reps interview [lang|id]
+`drill grind [lang]` is the unbounded session: due first, then lowest box, then least
+recently attempted, never the same snippet twice in eight drill. `drill interview [lang|id]
 [minutes]` is blank mode with a countdown (45 minutes by default) and a single submission;
 running out of time is a fail even if the code was right.

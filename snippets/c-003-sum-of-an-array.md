@@ -3,6 +3,7 @@ id: c-003
 title: Sum of an array
 lang: c
 tags: [arrays]
+family: sum
 modes: [trace, recall, blank]
 spec: long sum(const int *xs, int n) returns the total of n values.
 tests:

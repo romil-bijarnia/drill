@@ -1,7 +1,7 @@
 ---
 id: ladder-05-small-systems
 title: Ladder 5 — small systems
-status: active
+status: later
 stack: [csharp]
 ---
 Rung five: three things that look like real infrastructure in miniature. A key-value

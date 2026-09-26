@@ -3,6 +3,7 @@ id: py-005
 title: Greatest common divisor
 lang: py
 tags: [algorithms, recursion]
+family: gcd
 modes: [trace, recall, blank]
 spec: Greatest common divisor of two non-negative integers, recursively.
 tests:

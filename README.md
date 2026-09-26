@@ -1,23 +1,26 @@
-# Reps
+# Drill
 
-A gym for writing code from a blank file, in C#, Python, C and ARM64 assembly. One rep
-after another for as long as you want, real projects with timed work blocks, and one
-number that matters.
+Writing code from a blank file, all the way down the stack: Python, C#, C and ARM64
+assembly. One rep after another for as long as you want, the same problem taken from
+Python down to assembly, quick-fire bits and bytes, real projects with timed work blocks,
+and one number that matters.
 
-## Snippets: three ways to practise each one
+## Snippets: four ways to practise each one
 
-| Mode   | What you see                             | What you do                                  | Pass                                                |
-|--------|------------------------------------------|----------------------------------------------|-----------------------------------------------------|
-| Recall | The code, for as long as you need        | Hide it, write it yourself; Ctrl+D runs the tests | Every test passes (exact match if there are none) |
-| Blank  | A one-line spec and the tests            | Write it; Ctrl+D compiles and runs           | Every test passes                                   |
-| Trace  | The code, dim, on screen                 | Type over it; every key goes green/red       | 97 % of keystrokes correct                          |
+| Mode    | What you see                             | What you do                                       | Pass                                              |
+|---------|------------------------------------------|---------------------------------------------------|---------------------------------------------------|
+| Recall  | The code, for as long as you need        | Hide it, write it yourself; Ctrl+D runs the tests | Every test passes (exact match if there are none) |
+| Blank   | A one-line spec and the tests            | Write it; Ctrl+D compiles and runs                | Every test passes                                 |
+| Predict | The code and each test call              | Type what the call returns before anything runs   | Every call predicted                              |
+| Trace   | The code, dim, on screen                 | Type over it; every key goes green/red            | 97 % of keystrokes correct                        |
 
 Each snippet sits in a box from 1 to 5. Box 1, where every snippet starts and where a miss
 sends it back, is recall; boxes 2 to 5 are blank. A pass moves it up a box and it comes
-back after 2, 4, 8 or 16 days. `reps` serves one rep after another in that order: whatever
+back after 2, 4, 8 or 16 days. `drill` serves one rep after another in that order: whatever
 is ready first, then the weakest, then the least recent, with no count to clear; q stops
-whenever you like. Trace is never scheduled: `reps trace asm` when the syntax is new to
-you. The scoreboard is the blank-mode first-try pass rate, week over week.
+whenever you like. Trace and predict are never scheduled and move no boxes: `drill trace
+asm` when the syntax is new to you, `drill predict c` to train the model in your head
+before your fingers. The scoreboard is the blank-mode first-try pass rate, week over week.
 
 Recall is not memorising. Read the reference until you understand it, hide it, and write
 a version that passes the tests; different names or a different approach are fine. After
@@ -30,29 +33,55 @@ line. A wrong character shows red until you Backspace over it.
 
 Recall and blank use a small built-in editor with nothing in it to help you: Ctrl+D
 submits, Esc gives up, Tab indents, Enter keeps the indentation (after `{`, or `:` in
-Python, it adds a level). `REPS_EDITOR="nano"` or `"code --wait"` if you must use an
+Python, it adds a level). `DRILL_EDITOR="nano"` or `"code --wait"` if you must use an
 external editor; leave autocomplete off.
+
+## Down the stack
+
+Snippets that solve the same problem in different languages share a `family:` name.
+`drill families` shows every such problem and how far down you have taken it; `drill down`
+serves one problem in Python, then C#, then C, then ARM64, opening the next language only
+when the one above it passes, and moves to another problem when that one is done all the
+way down. `drill down strlen` sticks to one problem.
+
+`drill compile` goes the other way: it shows a C snippet next to what clang emits for it
+at -O1, and then asks for your own ARM64 for the same tests, with the prototype taken from
+the C source. Any C snippet with tests can be taken down this way.
+
+## Bits
+
+`drill bits` is quick-fire questions on what sits under the code: hex and binary, two's
+complement, shifts and rotates, masks, byte order, popcount and friends, and what one
+ARM64 instruction does to a register (`add`, `lsr`, `csel`, `ubfx`, `ldrb`, `movk`, the
+flags after `cmp`, and so on). They are generated as you go, so they never run out. `drill
+bits arm` picks a topic: hex, twos, shift, mask, endian, pop, arm. Accuracy and speed per
+topic show in `drill stats`.
 
 ## Commands
 
 ```
-reps [lang]                 one rep after another, q stops whenever you like
-reps recall [id|lang]       read it, hide it, write it; the tests decide
-reps blank [id|lang]        the spec and the tests only
-reps trace [id|lang]        type over the reference
-reps interview [lang|id] [minutes]   one blank problem, 45 min by default, one submission
+drill [lang]                 one rep after another, q stops whenever you like
+drill recall [id|lang]       read it, hide it, write it; the tests decide
+drill blank [id|lang]        the spec and the tests only
+drill predict [id|lang]      say what each test call returns before it runs
+drill trace [id|lang]        type over the reference
+drill down [problem]         one problem from Python down to ARM64
+drill families               the problems that exist in several languages
+drill compile [c-id]         clang's ARM64 for a C snippet, then your own
+drill bits [topic]           quick-fire hex, twos, shift, mask, endian, pop, arm
+drill interview [lang|id] [minutes]   one blank problem, 45 min by default, one submission
 
-reps projects               real builds with steps: progress and hours
-reps project <id>           one project's goal, steps and time
-reps project new <id> <title>
-reps work [id] [step]       timed block on the next open step; Enter marks it done
+drill projects               real builds with steps: progress and hours
+drill project <id>           one project's goal, steps and time
+drill project new <id> <title>
+drill work [id] [step]       timed block on the next open step; Enter marks it done
 
-reps list [lang] [tag]      every snippet: box, next date, last three results
-reps stats                  streak, boxes per language, weekly blank first-try rate, project hours
-reps verify [lang|id]       reference code passes its own tests
-reps new <lang-id> <title>  a new snippet file to fill in (cs-, py-, c-, asm-)
-reps import <file> [tags]   your own functions (.cs .py .c .s) as trace/recall snippets
-reps where                  paths, editor and toolchains in use
+drill list [lang] [tag]      every snippet: box, next date, last three results
+drill stats                  streak, boxes, predict and bits accuracy, weekly blank first-try rate, project hours
+drill verify [lang|id]       reference code passes its own tests
+drill new <lang-id> <title>  a new snippet file to fill in (cs-, py-, c-, asm-)
+drill import <file> [tags]   your own functions (.cs .py .c .s) as trace/recall snippets
+drill where                  paths, editor and toolchains in use
 ```
 
 `lang` is `cs`, `py`, `c` or `asm` and can be given wherever an id can.
@@ -89,11 +118,16 @@ What it is, who it is for, what done looks like.
 - [ ] Post feed
 ```
 
-`reps work devdeakin-site` shows the next open step and starts a clock; you build in your
+`drill work devdeakin-site` shows the next open step and starts a clock; you build in your
 real editor and repo; Enter marks the step done (the file is updated in place) and offers
-the next one, p pauses, q stops. Hours per project show in `reps projects` and `reps stats`.
-The five rungs of the coaching ladder ship as projects: calculator, file tools, data
-structures, algorithms, small systems. `reps interview` is the sixth rung.
+the next one, p pauses, q stops. Hours per project show in `drill projects` and `drill stats`.
+Projects with `status: later` wait on one line until you set them active.
+
+Two ladders ship as projects. The machine ladder goes down to the metal and is the one
+that is active: a hexdump tool, a Mach-O reader, your own malloc, a stack VM with an
+assembler, an ARM64 assembler, a compiler that emits ARM64, and bare metal on QEMU. The
+coaching ladder (calculator, file tools, data structures, algorithms, small systems) is
+parked as later. `drill interview` is the rung after any of them.
 
 ## Snippet files
 
@@ -117,21 +151,22 @@ tests:
 ...
 ```
 
-`spec` is all blank mode shows (plus `decl` for assembly). Each `call` is an expression in
+`spec` is all blank mode shows (plus `decl` for assembly). `family: gcd` links snippets
+that solve the same problem in different languages for `drill down`. Each `call` is an expression in
 the test language evaluated with your code in scope; it passes when the printed result
-equals `expect`. Snippets without tests are trace and recall only. The bank ships with 45
-C#, 40 Python, 24 C and 12 assembly snippets; `reps verify` before you practise new ones.
+equals `expect`. Snippets without tests are trace and recall only. The bank ships with 56 C#, 51 Python, 62 C and 52 assembly snippets; `drill verify` before you practise new ones.
 
 ## Data
 
-`reps.db` (SQLite, git-ignored) in the repo root: `snippets` (box, next_due), `attempts`
+`drill.db` (SQLite, git-ignored) in the repo root: `snippets` (box, next_due), `attempts`
 (mode, seconds, accuracy, passed, first_try), `sessions` (date, attempts,
-blank_first_try_rate), `work` (project, step, seconds, completed). The root is
-`REPS_HOME`, else the nearest parent directory with a `snippets/` folder, else
-`~/Documents/reps`.
+blank_first_try_rate), `work` (project, step, seconds, completed), `bits` (kind, seconds,
+correct, question, answer, given). The root is
+`DRILL_HOME`, else the nearest parent directory with a `snippets/` folder, else
+`~/Documents/drill`.
 
 ## Build
 
 .NET 10 SDK; `cc` (Xcode command line tools) for C and assembly; `python3` for Python.
-`dotnet build src/Reps`, `dotnet test tests/Reps.Tests`. Install as a command with
-`Tools/install.sh` (publishes to `~/.local/share/reps` and links `reps` into `~/.local/bin`).
+`dotnet build src/Drill`, `dotnet test tests/Drill.Tests`. Install as a command with
+`Tools/install.sh` (publishes to `~/.local/share/drill` and links `drill` into `~/.local/bin`).

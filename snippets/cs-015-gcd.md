@@ -2,6 +2,7 @@
 id: cs-015
 title: Greatest common divisor
 tags: [algorithms, recursion]
+family: gcd
 modes: [trace, recall, blank]
 spec: Greatest common divisor of two non-negative integers, recursively.
 tests:

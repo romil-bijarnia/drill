@@ -3,6 +3,7 @@ id: c-009
 title: Reverse a string in place
 lang: c
 tags: [strings, pointers]
+family: reverse
 modes: [trace, recall, blank]
 spec: char *reverse(char *s) reverses s in place and returns it.
 tests:

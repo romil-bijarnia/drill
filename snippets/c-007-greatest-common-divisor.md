@@ -3,6 +3,7 @@ id: c-007
 title: Greatest common divisor
 lang: c
 tags: [recursion]
+family: gcd
 modes: [trace, recall, blank]
 spec: int gcd(int a, int b), recursively.
 tests:
