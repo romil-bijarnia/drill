@@ -210,15 +210,16 @@ public sealed class TextBox
     {
         var width = Math.Max(40, SafeWidth());
         var height = Math.Max(12, SafeHeight());
-        var editorTop = _header.Count + 1;
+        var header = _header.SelectMany(l => Wrap(l, width - 1)).ToList();
+        var editorTop = header.Count + 1;
         var visible = Math.Max(3, height - editorTop - 2);
         if (_row < _scroll) _scroll = _row;
         if (_row >= _scroll + visible) _scroll = _row - visible + 1;
 
         var output = new StringBuilder("\e[H");
-        foreach (var line in _header)
+        foreach (var line in header)
         {
-            output.Append(Fit(line, width - 1)).Append(Ansi.ClearLine).Append('\n');
+            output.Append(line).Append(Ansi.ClearLine).Append('\n');
         }
         output.Append(Ansi.Dim).Append(new string('─', width - 1)).Append(Ansi.Reset).Append(Ansi.ClearLine).Append('\n');
         for (var i = 0; i < visible; i++)
@@ -242,6 +243,30 @@ public sealed class TextBox
     }
 
     private static string Fit(string text, int width) => text.Length <= width ? text : text[..Math.Max(0, width - 1)] + "…";
+
+    /// Header lines wrap at word boundaries instead of being cut, so a long spec is
+    /// readable in an 80-column terminal.
+    private static IEnumerable<string> Wrap(string line, int width)
+    {
+        if (line.Length <= width)
+        {
+            yield return line;
+            yield break;
+        }
+        var indent = line.Length - line.TrimStart().Length;
+        var rest = line;
+        while (rest.Length > width)
+        {
+            var cut = rest.LastIndexOf(' ', width - 1);
+            if (cut <= indent)
+            {
+                cut = width - 1;
+            }
+            yield return rest[..cut].TrimEnd();
+            rest = new string(' ', Math.Min(indent + 2, width / 2)) + rest[cut..].TrimStart();
+        }
+        yield return rest;
+    }
 
     private static int SafeWidth()
     {

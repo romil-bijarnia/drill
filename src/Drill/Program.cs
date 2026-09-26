@@ -757,7 +757,7 @@ public static class Program
         var mode = ModeFor(box, snippet);
         var cold = box <= 1 && mode == Mode.Blank;
         var result = cold
-            ? await RunAsync(mode, snippet, workspace, today, "cold try: the spec and the tests, nothing else. Miss, and the reference follows. Esc goes straight to it.")
+            ? await RunAsync(mode, snippet, workspace, today, "Write the function below. Ctrl+D runs the tests. Esc shows the reference.")
             : await RunAsync(mode, snippet, workspace, today);
         if (cold && !result.Passed && snippet.Supports(Mode.Recall))
         {
