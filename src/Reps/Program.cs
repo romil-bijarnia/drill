@@ -499,7 +499,7 @@ public static class Program
     private static int Help()
     {
         AnsiConsole.WriteLine("""
-            reps — a gym for writing C# from a blank file
+            reps — a gym for writing code from a blank file: C#, Python, C, ARM64 asm
 
               reps [lang]          today's session: everything due, capped at 15
               reps trace [id|lang] type over the reference (box 1 work)
